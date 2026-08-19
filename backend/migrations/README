@@ -1,0 +1,7 @@
+The schema's history, one file per revision under versions/.
+
+The database URL is not configured here: env.py loads the platform's own
+config.yaml through src/platform/environment.py, so DATAPLATFORM_CONFIG selects the
+database for `alembic` exactly as it does for the API.
+
+See the "Database migrations" section of ../README.md before writing one.

@@ -1,0 +1,71 @@
+[project]
+name = "api"
+version = "0.1.0"
+description = "API for the Project Arcanist dataplatform"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "alembic>=1.19.1",
+    "email-validator>=2.3.0",
+    "fastapi>=0.136.3",
+    "httpx>=0.28.1",
+    "loguru>=0.7.3",
+    "minio>=7.2.20",
+    "pydantic>=2.13.4",
+    "pyyaml>=6.0.3",
+    "sqlmodel>=0.0.38",
+    # Imported directly by the MinIO datastore, to catch a store that never
+    # answered. It arrives underneath minio either way; naming it here is what
+    # keeps that import from breaking when minio changes its HTTP client.
+    "urllib3>=2.7.0",
+]
+
+[dependency-groups]
+dev = [
+    "fastapi[standard]>=0.136.3",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.3",
+    "ty>=0.0.39",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+# The suite is well above this. The floor is here so that a change which
+# quietly stops testing something fails rather than merely showing a smaller
+# number that nobody is looking at.
+fail_under = 80
+show_missing = true
+
+[tool.ruff]
+# Wide enough for a signature with keyword-only arguments, narrow enough that
+# two files still sit side by side. The prose in the docstrings is wrapped
+# tighter than this by hand, and is left alone.
+line-length = 96
+target-version = "py314"
+
+[tool.ruff.lint]
+# `S` is the reason this list is worth having: `src/` raises none of it today,
+# so the rule is a ratchet rather than a cleanup. `I` is here because the
+# import graph is the one thing a reader uses to find their way around a
+# feature package, and sorted blocks are what make it skimmable.
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RET", "C4", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+# A test asserts, and builds SQL out of the identifiers it is testing the
+# handling of. The credentials and temporary paths are the throwaway ones the
+# fixtures hand to a server they started themselves, and the partial paths are
+# resolved from PATH a line earlier.
+"tests/*" = ["S101", "S105", "S106", "S108", "S607", "S608"]
+
+# Alembic writes these, and the platform does not hand-edit what it generates
+# beyond the docstring at the top.
+"migrations/versions/*" = ["E501"]

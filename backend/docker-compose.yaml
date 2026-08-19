@@ -1,0 +1,64 @@
+# The services the API talks to: the Open Policy Agent it asks for every
+# access decision, and a MinIO to hold blobs.
+#
+#   docker compose up -d opa minio
+#
+# The policy is mounted rather than baked in, so editing a file under
+# policies/ and restarting the container is enough to change who may do what.
+# In Kubernetes the same container runs as a sidecar of the API pod, with the
+# policy supplied by a ConfigMap.
+
+services:
+  opa:
+    image: openpolicyagent/opa:1.19.0
+    container_name: dataplatform-opa
+    ports:
+      - "8181:8181"
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      # Log every decision, which is what makes "why was I refused?" answerable.
+      - "--set=decision_logs.console=true"
+      # Loading the directory fails the container if the policy does not
+      # compile, rather than serving an OPA where every rule is undefined.
+      - "/policies"
+    volumes:
+      - ./policies:/policies:ro
+    healthcheck:
+      test: ["CMD", "/opa", "version"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Object storage for blobs. Unlike OPA, the API is not configured to reach
+  # this from a file: a MinIO is registered as a datastore through the API,
+  # which is what lets several of them exist at once. The credential below is
+  # the platform's own, and is never handed to a caller - what callers get is
+  # a URL signed from it, good for one method on one key for a few minutes.
+  #
+  # The console is on 9001, so `http://localhost:9001` shows what the tests
+  # and the API have actually written.
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: dataplatform-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      # Development values. A real deployment sets these to something else and
+      # keeps them out of version control, exactly as with the bootstrap keys
+      # in config.yaml.
+      MINIO_ROOT_USER: dataplatform
+      MINIO_ROOT_PASSWORD: dataplatform-secret
+    command: ["server", "/data", "--console-address", ":9001"]
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  minio-data:

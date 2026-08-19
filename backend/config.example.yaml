@@ -1,0 +1,40 @@
+# Configuration of the dataplatform API.
+#
+# Copy this file to config.yaml and fill in the bootstrap administrator. The
+# API reads no environment variables other than DATAPLATFORM_CONFIG, which
+# names the file to load and defaults to ./config.yaml.
+
+database:
+  url: sqlite:///mydb.db
+  echo: false
+
+auth:
+  # Callers authenticate with an API key, sent as:
+  #
+  #   Authorization: Bearer <key>
+  #
+  # Every user and every key is created through the API, and creating either
+  # takes a platform administrator, so the platform has to arrive with one
+  # already holding a key. That is what this list is.
+  #
+  # Platform administrators bypass every project level check, and are the only
+  # ones who may register a datastore or create a user, so leaving this list
+  # empty means nobody can do anything at all. Keep it short.
+  #
+  # These keys are secrets. Generate one with:
+  #
+  #   python -c "import secrets; print('dpk_' + secrets.token_urlsafe(32))"
+  #
+  # and keep the filled-in config.yaml out of version control. Changing a key
+  # here and restarting rotates it: the one it replaces is revoked.
+  bootstrap_platform_admins:
+    - email: "root@example.com"
+      name: "Root"
+      api_key: "REPLACE_ME"
+
+opa:
+  # The Open Policy Agent server holding the policy under policies/.
+  url: http://localhost:8181
+  decision_path: dataplatform/authz/decision
+  filter_path: dataplatform/authz/allowed_resource_ids
+  request_timeout_seconds: 2
