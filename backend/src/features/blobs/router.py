@@ -235,12 +235,12 @@ def create_blobs_router() -> APIRouter:
         This describes the blob, not its contents: the bytes are reached
         through the access endpoint below.
         """
-        blob = blobs_service.get_blob(session=session, project_id=project_id, key=key)
         await enforcer.ensure_allowed(
             subject=subject,
             action=Action.BLOB_READ,
-            resource=_as_resource(project_id=project_id, identifier=str(blob.id)),
+            resource=_as_resource(project_id=project_id, identifier=key),
         )
+        blob = blobs_service.get_blob(session=session, project_id=project_id, key=key)
 
         return BlobView(
             blob=blob,
@@ -265,12 +265,12 @@ def create_blobs_router() -> APIRouter:
         this one key, and expires within minutes - a signature cannot be
         withdrawn, so it is made not to last.
         """
-        blob = blobs_service.get_blob(session=session, project_id=project_id, key=key)
         await enforcer.ensure_allowed(
             subject=subject,
             action=_ACTION_FOR[body.operation],
-            resource=_as_resource(project_id=project_id, identifier=str(blob.id)),
+            resource=_as_resource(project_id=project_id, identifier=key),
         )
+        blob = blobs_service.get_blob(session=session, project_id=project_id, key=key)
 
         return await blobs_service.grant_access(
             session=session,
@@ -293,13 +293,12 @@ def create_blobs_router() -> APIRouter:
         because the data and the record of it have to go together: a URL handed
         to a client could remove one and leave the other.
         """
-        blob = blobs_service.get_blob(session=session, project_id=project_id, key=key)
         await enforcer.ensure_allowed(
             subject=subject,
             action=Action.BLOB_DELETE,
-            resource=_as_resource(project_id=project_id, identifier=str(blob.id)),
+            resource=_as_resource(project_id=project_id, identifier=key),
         )
-
+        blob = blobs_service.get_blob(session=session, project_id=project_id, key=key)
         await blobs_service.delete_blob(session=session, blob=blob)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 

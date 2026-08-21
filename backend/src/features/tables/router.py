@@ -176,15 +176,14 @@ def create_tables_router() -> APIRouter:
         This describes the table, not what is in it: the rows are reached
         through the query endpoint below.
         """
-        table = tables_service.get_table(
-            session=session, project_id=project_id, name=table_name
-        )
         await enforcer.ensure_allowed(
             subject=subject,
             action=Action.TABLE_READ,
-            resource=_as_resource(project_id=project_id, identifier=str(table.id)),
+            resource=_as_resource(project_id=project_id, identifier=table_name),
         )
-        return table
+        return tables_service.get_table(
+            session=session, project_id=project_id, name=table_name
+        )
 
     @router.post("/{table_name}/query", response_model=DataStoreQueryResponse)
     async def query_table(
@@ -204,10 +203,12 @@ def create_tables_router() -> APIRouter:
         drop anything, or touch a table other than this one, and it is the
         database engine that refuses - not a check over the statement text.
         """
-        table = tables_service.get_table(
-            session=session, project_id=project_id, name=table_name
-        )
-        resource = _as_resource(project_id=project_id, identifier=str(table.id))
+        # The policy is asked before the table is looked up, so that a caller
+        # who may not reach this project cannot learn which table names exist
+        # in it from the difference between a 403 and a 404. The resource id is
+        # the name the caller supplied, which is all the policy needs at
+        # project scope, and reveals nothing back to them they did not send.
+        resource = _as_resource(project_id=project_id, identifier=table_name)
 
         may_write = await enforcer.is_allowed(
             subject=subject, action=Action.TABLE_WRITE, resource=resource
@@ -220,6 +221,9 @@ def create_tables_router() -> APIRouter:
                 subject=subject, action=Action.TABLE_QUERY, resource=resource
             )
 
+        table = tables_service.get_table(
+            session=session, project_id=project_id, name=table_name
+        )
         return await tables_service.run_query(
             session=session,
             table=table,
@@ -241,15 +245,14 @@ def create_tables_router() -> APIRouter:
         platform created this table, so deleting it drops the table and the
         rows in it for good.
         """
-        table = tables_service.get_table(
-            session=session, project_id=project_id, name=table_name
-        )
         await enforcer.ensure_allowed(
             subject=subject,
             action=Action.TABLE_DELETE,
-            resource=_as_resource(project_id=project_id, identifier=str(table.id)),
+            resource=_as_resource(project_id=project_id, identifier=table_name),
         )
-
+        table = tables_service.get_table(
+            session=session, project_id=project_id, name=table_name
+        )
         await tables_service.delete_table(session=session, table=table)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 

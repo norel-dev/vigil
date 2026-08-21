@@ -1,0 +1,37 @@
+# Configuration of the API as the compose file runs it.
+#
+# This file is committed, unlike config.yaml, because nothing in it is a
+# secret: the key below is a fixed local development one, and everything it
+# names is a container on the compose network. Anything outside a laptop
+# wants its own file, with a key from wherever that deployment keeps secrets.
+#
+# The API is pointed at this file by DATAPLATFORM_CONFIG in docker-compose.yaml.
+
+database:
+  # Four slashes: an absolute path inside the container. /data is a named
+  # volume, so the metadata survives `docker compose down` and is thrown away
+  # by `docker compose down -v`.
+  url: sqlite:////data/metadata/platform.db
+  echo: false
+
+auth:
+  # The bootstrap administrator, whose key the seeding container reads out of
+  # this file to register the datastores below. Call the API with it:
+  #
+  #   curl -H "Authorization: Bearer dpk_local_docker_compose_development_key" \
+  #        http://localhost:8000/users/me
+  #
+  # It is deliberately not a random string: a key that looks generated is a
+  # key somebody eventually mistakes for a real one.
+  bootstrap_platform_admins:
+    - email: "root@example.com"
+      name: "Root"
+      api_key: "dpk_local_docker_compose_development_key"
+
+opa:
+  # The `opa` service on the compose network, holding the policy under
+  # policies/ mounted from the host.
+  url: http://opa:8181
+  decision_path: dataplatform/authz/decision
+  filter_path: dataplatform/authz/allowed_resource_ids
+  request_timeout_seconds: 2

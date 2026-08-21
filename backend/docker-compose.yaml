@@ -1,19 +1,87 @@
-# The services the API talks to: the Open Policy Agent it asks for every
-# access decision, and a MinIO to hold blobs.
+# The whole backend, runnable on its own:
 #
-#   docker compose up -d opa minio
+#   docker compose up -d
 #
-# The policy is mounted rather than baked in, so editing a file under
-# policies/ and restarting the container is enough to change who may do what.
-# In Kubernetes the same container runs as a sidecar of the API pod, with the
-# policy supplied by a ConfigMap.
+# That builds the API, starts the Open Policy Agent it asks for every access
+# decision and the MinIO it keeps blobs in, migrates the metadata database,
+# creates the bootstrap administrator, and registers three datastores to play
+# with. When it settles, http://localhost:8000/docs is a working API with
+# storage already behind it.
+#
+# The pieces are still separable: `docker compose up -d opa minio` starts only
+# the services, which is what a `uv run fastapi dev main.py` on the host wants.
+#
+# What each container is configured from, and where its data goes:
+#
+#   api    config.docker.yaml, mounted read-only. Metadata database and the
+#          SQLite datastores live in the `api-data` volume.
+#   opa    policies/, mounted read-only. Editing a rule and restarting the
+#          container is enough to change who may do what.
+#   minio  the credential below, which the platform holds and never hands out.
+#
+# `docker compose down` keeps the data; `docker compose down -v` throws it
+# away and gives the next `up` an empty platform.
+
+# The platform's own MinIO credential, in one place because both the server
+# and the datastore registered against it need to agree on it. Override either
+# in the environment, or in a .env file beside this one.
+x-minio-credentials: &minio-credentials
+  MINIO_ROOT_USER: ${MINIO_ROOT_USER:-dataplatform}
+  MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dataplatform-secret}
 
 services:
+  # The API. The image carries its dependencies; the source is mounted over it
+  # read-only, so editing a file on the host reloads the server without a
+  # rebuild. A rebuild is only needed when the dependencies change:
+  #
+  #   docker compose up -d --build api
+  #
+  # There is no migration step to run: the application migrates its own
+  # database and creates its bootstrap administrator as it starts.
+  api:
+    build:
+      context: .
+    image: dataplatform-api
+    container_name: dataplatform-api
+    depends_on:
+      opa:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      # The only environment variable the process reads. Everything else it
+      # needs is in the file this names.
+      DATAPLATFORM_CONFIG: /app/config.docker.yaml
+      # The reloader watches a bind mount, and a bind mount from a macOS or
+      # Windows host delivers no filesystem events into the VM the daemon runs
+      # in. Polling is what makes an edit on the host reach the reloader at
+      # all; set it to false on a Linux host, where the events do arrive.
+      WATCHFILES_FORCE_POLLING: ${WATCHFILES_FORCE_POLLING:-true}
+    ports:
+      # Overridable, because 8000 is also where a `uv run fastapi dev main.py`
+      # on the host listens, and the host's own process wins on localhost:
+      #
+      #   API_PORT=8001 docker compose up -d
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./:/app:ro
+      - api-data:/data
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/', timeout=2)"
+      interval: 10s
+      timeout: 5s
+      start_period: 40s
+      retries: 5
+
   opa:
     image: openpolicyagent/opa:1.19.0
     container_name: dataplatform-opa
     ports:
-      - "8181:8181"
+      - "${OPA_PORT:-8181}:8181"
     command:
       - "run"
       - "--server"
@@ -33,9 +101,10 @@ services:
 
   # Object storage for blobs. Unlike OPA, the API is not configured to reach
   # this from a file: a MinIO is registered as a datastore through the API,
-  # which is what lets several of them exist at once. The credential below is
-  # the platform's own, and is never handed to a caller - what callers get is
-  # a URL signed from it, good for one method on one key for a few minutes.
+  # which is what lets several of them exist at once. The `seed` service below
+  # is what does that registering. The credential is the platform's own, and
+  # is never handed to a caller - what callers get is a URL signed from it,
+  # good for one method on one key for a few minutes.
   #
   # The console is on 9001, so `http://localhost:9001` shows what the tests
   # and the API have actually written.
@@ -43,14 +112,13 @@ services:
     image: quay.io/minio/minio:latest
     container_name: dataplatform-minio
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     environment:
       # Development values. A real deployment sets these to something else and
       # keeps them out of version control, exactly as with the bootstrap keys
       # in config.yaml.
-      MINIO_ROOT_USER: dataplatform
-      MINIO_ROOT_PASSWORD: dataplatform-secret
+      <<: *minio-credentials
     command: ["server", "/data", "--console-address", ":9001"]
     volumes:
       - minio-data:/data
@@ -60,5 +128,41 @@ services:
       timeout: 3s
       retries: 3
 
+  # Registers the datastores, and then exits. Datastores are registered
+  # through the API by a platform administrator rather than declared in a
+  # configuration file, so this container is that administrator: it reads the
+  # bootstrap key out of config.docker.yaml and POSTs the three stores below.
+  #
+  #   sqlite-main     tables, in the API container's volume
+  #   sqlite-scratch  tables, somewhere else - so that "which store did this
+  #                   table go to?" has an answer worth checking
+  #   minio-blobs     blobs, in the MinIO above
+  #
+  # It is idempotent, so it is safe on every `up`; a store deleted through the
+  # API comes back the next time. `docker compose logs seed` says what it did.
+  seed:
+    image: curlimages/curl:8.11.1
+    container_name: dataplatform-seed
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      <<: *minio-credentials
+      API_URL: http://api:8000
+      CONFIG_FILE: /config.docker.yaml
+      # How the API reaches MinIO. This is also the host a presigned URL comes
+      # back pointing at, because the signature covers it: from the host, use
+      # `curl --resolve minio:9000:127.0.0.1 "<url>"` to follow one.
+      MINIO_ENDPOINT: minio:9000
+    volumes:
+      - ./config.docker.yaml:/config.docker.yaml:ro
+      - ./scripts/seed-datastores.sh:/seed.sh:ro
+    entrypoint: ["sh", "/seed.sh"]
+    restart: "no"
+
 volumes:
   minio-data:
+  # The metadata database and the SQLite datastores. Kept off the host on
+  # purpose: the API's own mydb.db beside this file belongs to whatever runs
+  # outside Docker, and the two must not be the same database.
+  api-data:

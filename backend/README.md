@@ -83,12 +83,24 @@ A project reaches the data behind a datastore through an object of its own — a
 **table** when the data has a shape, a **blob** when it does not — never through
 the datastore. The roles are what govern them:
 
-| Role     | May do                                                                       |
-|----------|------------------------------------------------------------------------------|
-| `viewer` | read the project, see its tables and blobs, run read-only SQL, download blobs |
-| `editor` | the above, plus write rows, alter a table's shape, and upload to blobs        |
-| `admin`  | the above, plus update the project and manage its members                     |
-| `owner`  | the above, plus delete the project, and create and delete tables and blobs    |
+| Role     | May do                                                                                     |
+|----------|--------------------------------------------------------------------------------------------|
+| `viewer` | read the project, see its tables and blobs, run read-only SQL, download blobs              |
+| `editor` | the above, plus write rows, alter a table's shape, and upload to blobs                     |
+| `admin`  | the above, plus update the project and manage the roles its members hold                   |
+| `owner`  | the above, plus remove members, delete the project, and create and delete tables and blobs |
+
+Membership is not one power but two, because the top of that ladder is not just
+another rung. An admin shapes what the people in a project may do; who is in it
+at all is the owner's to decide. So only an owner may grant the `owner` role, an
+admin cannot hand out the role that outranks their own, and only an owner may
+remove somebody outright.
+
+Nor can the `owner` role be taken back from inside the project, by demotion or
+by removal, by a fellow owner or by the holder themselves. Owners hold a project
+jointly, and that would not mean much if one of them could quietly unseat the
+other. A platform administrator stands outside all of it, which is how a project
+whose owner has left is handed on.
 
 The administrators listed under `auth.bootstrap_platform_admins` in the
 configuration exist as soon as the platform starts, each already holding the key
@@ -334,6 +346,75 @@ Every other dump, the API's responses included, gets the mask.
 Anything speaking S3 works here; `secure: false` is for local development only.
 
 ## Running it
+
+### All of it, in Docker
+
+```bash
+docker compose up -d
+```
+
+That is the whole of it. Compose builds the API, starts the Open Policy Agent
+and the MinIO it depends on, and waits for each before starting the next. The
+API migrates its own database and creates the bootstrap administrator as it
+starts, and a short-lived `seed` container then registers the storage through
+the API, the way an administrator otherwise would:
+
+| Datastore        | Holds  | Where                                     |
+| ---------------- | ------ | ----------------------------------------- |
+| `sqlite-main`    | tables | `/data/stores/main.db` in the API container |
+| `sqlite-scratch` | tables | `/data/stores/scratch.db`, so that "which store did this table go to?" has an answer worth checking |
+| `minio-blobs`    | blobs  | the `minio` service                       |
+
+When it settles:
+
+```bash
+KEY=dpk_local_docker_compose_development_key
+curl -H "Authorization: Bearer $KEY" http://localhost:8000/users/me
+curl -H "Authorization: Bearer $KEY" http://localhost:8000/datastores/catalogue
+```
+
+http://localhost:8000/docs is the same thing with a **Authorize** button to
+paste that key into, and http://localhost:9001 is the MinIO console.
+
+The key is in `config.docker.yaml`, which is committed precisely because
+nothing in it is a secret — every deployment that is not a laptop wants its
+own file and its own key. `docker compose logs -f api` follows the API, and
+`docker compose logs seed` says which datastores it registered; the seeding is
+idempotent, so a store deleted through the API comes back on the next `up`.
+
+Editing a file under `src/` reloads the server: the source is mounted over the
+image read-only, so no rebuild is needed. Changing a dependency is the case
+that needs one:
+
+```bash
+docker compose up -d --build api
+```
+
+`docker compose down` stops it all and keeps the data; `docker compose down -v`
+throws the data away, so the next `up` starts from an empty platform.
+
+Three things are worth knowing:
+
+- **Port 8000 may already be yours.** A `fastapi dev` running on the host wins
+  on `localhost` even while the container has the port published. Either stop
+  it, or move the container: `API_PORT=8001 docker compose up -d`.
+- **A presigned URL points at `minio:9000`**, because a signature covers the
+  host it was signed for and the API reaches MinIO under that name. Rewriting
+  the host would invalidate it, so follow one from the host by resolving the
+  name instead:
+
+  ```bash
+  curl --resolve minio:9000:127.0.0.1 "<the signed url>"
+  ```
+
+- **The metadata is in a volume**, not in `mydb.db` beside this README. The
+  file on disk belongs to whatever runs outside Docker, and the two are
+  deliberately not the same database.
+
+### Or, the pieces separately
+
+Running the API on the host and only its dependencies in Docker is the same
+setup the tests use, and is what the rest of this section describes.
 
 ### 1. Start Open Policy Agent and MinIO
 
