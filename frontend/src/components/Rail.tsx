@@ -74,7 +74,8 @@ export function Rail(props: {
   query: string;
   expanded: ReadonlySet<string>;
   onQuery: (value: string) => void;
-  onOpen: (row: RailRow) => void;
+  /** `newTab` when the reader asked for a tab of its own, browser-fashion. */
+  onOpen: (row: RailRow, newTab: boolean) => void;
   onNewTable: () => void;
   onNewBlob: () => void;
   findRef: React.RefObject<HTMLInputElement | null>;
@@ -107,7 +108,19 @@ export function Rail(props: {
         style={{ "--vg-depth": depth } as React.CSSProperties}
         aria-current={on ? "true" : undefined}
         aria-expanded={item.kind === "branch" ? props.expanded.has(item.path) : undefined}
-        onClick={() => props.onOpen(item)}
+        onClick={(event) => props.onOpen(item, event.metaKey || event.ctrlKey)}
+        onAuxClick={(event) => {
+          // Middle click opens beside, the way it opens a link everywhere else.
+          if (event.button === 1) {
+            event.preventDefault();
+            props.onOpen(item, true);
+          }
+        }}
+        title={
+          item.kind === "overview" || item.kind === "table"
+            ? "⌘-click or middle-click for a new tab"
+            : undefined
+        }
       >
         <span className="vg-tree-rail" style={{ width: depth * 12 }} aria-hidden="true" />
         <span className="vg-tree-caret" aria-hidden="true">

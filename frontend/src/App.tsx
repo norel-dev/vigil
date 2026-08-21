@@ -73,6 +73,12 @@ type Overlay =
 let bufferSeed = 0;
 const nextBufferId = () => `buf-${(bufferSeed += 1)}`;
 
+/** Whether two selections name the same object. */
+const sameSelection = (a: Selection, b: Selection) =>
+  a.kind === b.kind &&
+  (a.kind !== "table" || a.name === (b as { name: string }).name) &&
+  (a.kind !== "blob" || a.key === (b as { key: string }).key);
+
 export function App() {
   /* -- Identity ------------------------------------------------------------ */
   const [me, setMe] = useState<CurrentUser | null>(null);
@@ -250,36 +256,48 @@ export function App() {
   const canWrite =
     role === "platform admin" || role === "editor" || role === "admin" || role === "owner";
 
-  /* -- Buffers: opening, focusing, closing ---------------------------------- */
-
-  const sameBuffer = (item: Buffer, ws: Uuid, selection: Selection) =>
-    item.workspaceId === ws &&
-    item.selection.kind === selection.kind &&
-    (selection.kind !== "table" ||
-      (item.selection as { name: string }).name === selection.name) &&
-    (selection.kind !== "blob" || (item.selection as { key: string }).key === selection.key);
+  /* -- Buffers: navigating, opening, closing -------------------------------- */
 
   /**
-   * Open an object in its own buffer, or focus the buffer that already holds it.
+   * Show something in the buffer the reader is already in.
    *
-   * Everything is worked out here rather than inside the state updater: an
-   * updater that mints an id and sets another piece of state is not a pure
-   * function of its argument, and React is free to run it more than once.
+   * A buffer is a tab, and a tab is somewhere the reader put themselves.
+   * Picking an object out of the rail is a request to look at it, not a request
+   * to rearrange the tabline — so it re-points the tab in hand and nothing else
+   * moves. Two tabs may hold the same object at once; that is the reader's
+   * business, and a second tab is only ever born by being asked for.
    */
-  const openBuffer = useCallback(
-    (ws: Uuid, selection: Selection, options?: { force?: boolean }) => {
-      // Opening an object you already have open should take you to it, not
-      // give you a second copy of it. The `+` control is the exception: asking
-      // for a new buffer is asking for a new buffer.
-      const existing = options?.force
-        ? undefined
-        : buffers.find((item) => sameBuffer(item, ws, selection));
-      if (existing) {
-        setActiveBufferId(existing.id);
+  const goTo = useCallback(
+    (ws: Uuid, selection: Selection) => {
+      // Nothing open yet — the first thing looked at needs somewhere to land.
+      if (!activeBufferId || buffers.length === 0) {
+        const first: Buffer = { id: nextBufferId(), workspaceId: ws, selection };
+        setBuffers([first]);
+        setActiveBufferId(first.id);
         return;
       }
+      setBuffers(
+        buffers.map((item) =>
+          item.id === activeBufferId ? { ...item, workspaceId: ws, selection } : item,
+        ),
+      );
+    },
+    [buffers, activeBufferId],
+  );
+
+  /**
+   * Put something in a buffer of its own, beside the one it was opened from.
+   *
+   * The only way a buffer is born, and every caller is a reader who asked for
+   * one in so many words: the `+` control, a modifier-click, `:new tab`.
+   *
+   * The id is minted here rather than inside the state updater: an updater that
+   * mints an id and sets another piece of state is not a pure function of its
+   * argument, and React is free to run it more than once.
+   */
+  const openInNewBuffer = useCallback(
+    (ws: Uuid, selection: Selection) => {
       const fresh: Buffer = { id: nextBufferId(), workspaceId: ws, selection };
-      // A new buffer opens beside the one it was opened from, not at the end.
       const at = buffers.findIndex((item) => item.id === activeBufferId);
       setBuffers(
         at === -1
@@ -290,6 +308,38 @@ export function App() {
     },
     [buffers, activeBufferId],
   );
+
+  /**
+   * The tab in hand, again, beside itself.
+   *
+   * This is what `+` and `:new tab` mean now that picking an object never mints
+   * a tab: the reader gets a second copy of where they are and navigates one of
+   * them somewhere else — which is how the same object comes to sit in two tabs.
+   */
+  const duplicateBuffer = useCallback(() => {
+    if (!buffer) return;
+    openInNewBuffer(buffer.workspaceId, buffer.selection);
+  }, [buffer, openInNewBuffer]);
+
+  /**
+   * Something has left the store, so no buffer may go on pointing at it.
+   *
+   * This has to sweep every buffer rather than only the one in hand: two of
+   * them may hold the same object now, and a buffer still aimed at a deleted
+   * object would sit on its loading line for ever, waiting for a thing the
+   * store no longer has. They fall back to the workspace overview rather than
+   * closing — a tab is somewhere the reader put themselves, and a delete
+   * elsewhere is no reason to take it away from them.
+   */
+  const forgetSelection = useCallback((ws: Uuid, gone: Selection) => {
+    setBuffers((open) =>
+      open.map((item) =>
+        item.workspaceId === ws && sameSelection(item.selection, gone)
+          ? { ...item, selection: { kind: "workspace" } }
+          : item,
+      ),
+    );
+  }, []);
 
   const closeBuffer = useCallback(
     (id: string) => {
@@ -309,25 +359,9 @@ export function App() {
   const switchWorkspace = useCallback(
     (id: Uuid) => {
       if (!data[id]) void loadWorkspace(id);
-      if (buffers.length === 0) {
-        const fresh: Buffer = {
-          id: nextBufferId(),
-          workspaceId: id,
-          selection: { kind: "workspace" },
-        };
-        setBuffers([fresh]);
-        setActiveBufferId(fresh.id);
-        return;
-      }
-      setBuffers(
-        buffers.map((item) =>
-          item.id === activeBufferId
-            ? { ...item, workspaceId: id, selection: { kind: "workspace" } }
-            : item,
-        ),
-      );
+      goTo(id, { kind: "workspace" });
     },
-    [buffers, activeBufferId, data, loadWorkspace],
+    [data, loadWorkspace, goTo],
   );
 
   /* -- The rail ------------------------------------------------------------ */
@@ -386,12 +420,18 @@ export function App() {
     setRailCursor((at) => Math.min(at, Math.max(rail.length - 1, 0)));
   }, [rail.length]);
 
+  /**
+   * A rail row, opened. `newTab` is the reader asking for a second tab in so
+   * many words — a modifier-click, a middle-click, shift+Enter — rather than
+   * asking to move the tab they are in.
+   */
   const openRow = useCallback(
-    (row: RailRow) => {
+    (row: RailRow, newTab = false) => {
       if (!workspaceId) return;
-      if (row.kind === "overview") openBuffer(workspaceId, { kind: "workspace" });
-      else if (row.kind === "table") openBuffer(workspaceId, { kind: "table", name: row.table.name });
-      else if (row.kind === "leaf") openBuffer(workspaceId, { kind: "blob", key: row.key });
+      const show = newTab ? openInNewBuffer : goTo;
+      if (row.kind === "overview") show(workspaceId, { kind: "workspace" });
+      else if (row.kind === "table") show(workspaceId, { kind: "table", name: row.table.name });
+      else if (row.kind === "leaf") show(workspaceId, { kind: "blob", key: row.key });
       else {
         setCollapsed((current) => {
           const next = new Set(current);
@@ -401,7 +441,7 @@ export function App() {
         });
       }
     },
-    [workspaceId, openBuffer],
+    [workspaceId, goTo, openInNewBuffer],
   );
 
   /** The open blob, re-read so the detail is the store's answer now. */
@@ -489,6 +529,14 @@ export function App() {
         run: () => findRef.current?.focus(),
       },
       {
+        id: "new-tab",
+        kind: "cmd",
+        label: ":new tab",
+        hint: "a second tab on this same object, to navigate elsewhere",
+        run: () =>
+          buffer ? duplicateBuffer() : say("there is nothing open to open a second tab on", true),
+      },
+      {
         id: "close",
         kind: "cmd",
         label: ":close",
@@ -555,7 +603,7 @@ export function App() {
           kind: "table",
           label: table.name,
           hint: table.description ?? `table in ${table.datastore_name}`,
-          run: () => openBuffer(workspaceId, { kind: "table", name: table.name }),
+          run: () => goTo(workspaceId, { kind: "table", name: table.name }),
         });
       }
       for (const view of here.blobViews ?? []) {
@@ -564,7 +612,7 @@ export function App() {
           kind: "blob",
           label: view.blob.key,
           hint: view.blob.description ?? (view.stored ? "blob" : "recorded, no bytes yet"),
-          run: () => openBuffer(workspaceId, { kind: "blob", key: view.blob.key }),
+          run: () => goTo(workspaceId, { kind: "blob", key: view.blob.key }),
         });
       }
     }
@@ -582,7 +630,9 @@ export function App() {
     loadPlatform,
     loadWorkspace,
     closeBuffer,
-    openBuffer,
+    goTo,
+    buffer,
+    duplicateBuffer,
     switchWorkspace,
   ]);
 
@@ -656,7 +706,8 @@ export function App() {
         const item = rail[railCursor];
         if (item) {
           event.preventDefault();
-          openRow(item);
+          // Shift is the keyboard's modifier-click: open it beside, don't move.
+          openRow(item, event.shiftKey);
         }
         return;
       }
@@ -732,9 +783,7 @@ export function App() {
         onPick={setActiveBufferId}
         onClose={closeBuffer}
         onNew={() =>
-          workspaceId
-            ? openBuffer(workspaceId, { kind: "workspace" }, { force: true })
-            : setOverlay({ kind: "new-workspace" })
+          buffer ? duplicateBuffer() : setOverlay({ kind: "new-workspace" })
         }
         onPalette={() => setOverlay({ kind: "palette" })}
         onSignOut={signOut}
@@ -787,8 +836,8 @@ export function App() {
                   blobViews={here.blobViews}
                   members={here.members}
                   canWrite={canWrite}
-                  onOpenTable={(name) => openBuffer(project.id, { kind: "table", name })}
-                  onOpenBlob={(key) => openBuffer(project.id, { kind: "blob", key })}
+                  onOpenTable={(name) => goTo(project.id, { kind: "table", name })}
+                  onOpenBlob={(key) => goTo(project.id, { kind: "blob", key })}
                   onNewTable={() => setOverlay({ kind: "new-table" })}
                   onNewBlob={() => setOverlay({ kind: "upload" })}
                   onGrant={() => setOverlay({ kind: "grant" })}
@@ -815,15 +864,7 @@ export function App() {
                         setReachable(true);
                       }}
                       onDeleted={() => {
-                        if (activeBufferId && buffers.length > 1) closeBuffer(activeBufferId);
-                        else
-                          setBuffers(
-                            buffers.map((item) =>
-                              item.id === activeBufferId
-                                ? { ...item, selection: { kind: "workspace" } }
-                                : item,
-                            ),
-                          );
+                        forgetSelection(project.id, { kind: "table", name: table.name });
                         void loadWorkspace(project.id);
                         say(`${table.name} is gone, along with every row in it`);
                       }}
@@ -842,15 +883,7 @@ export function App() {
                     view={openBlob}
                     canWrite={canWrite}
                     onDeleted={() => {
-                      if (activeBufferId && buffers.length > 1) closeBuffer(activeBufferId);
-                      else
-                        setBuffers(
-                          buffers.map((item) =>
-                            item.id === activeBufferId
-                              ? { ...item, selection: { kind: "workspace" } }
-                              : item,
-                          ),
-                        );
+                      forgetSelection(project.id, { kind: "blob", key: openBlob.blob.key });
                       void loadWorkspace(project.id);
                       say("the blob and its bytes went together");
                     }}
@@ -910,7 +943,7 @@ export function App() {
           onCreated={async (name) => {
             setOverlay(null);
             await loadWorkspace(project.id);
-            openBuffer(project.id, { kind: "table", name });
+            goTo(project.id, { kind: "table", name });
             say(`${name} is ready — insert a row to put something in it`);
           }}
         />
@@ -923,7 +956,7 @@ export function App() {
           onUploaded={async (key) => {
             setOverlay(null);
             await loadWorkspace(project.id);
-            openBuffer(project.id, { kind: "blob", key });
+            goTo(project.id, { kind: "blob", key });
             say("the bytes are in the store");
           }}
         />

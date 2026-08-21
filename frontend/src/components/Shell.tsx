@@ -10,6 +10,13 @@ import { clock } from "../lib/format";
  * two different workspaces at once, so which workspace a buffer is in is a
  * property of the buffer rather than of the window, and it is stated where the
  * rest of the window's state is stated: the statusline.
+ *
+ * A buffer is also a place the reader put themselves, in the way a browser tab
+ * is. Picking an object out of the rail re-points the buffer in hand; it never
+ * mints one and never sends the reader off to some other buffer that happens to
+ * hold the same thing. A second buffer is only ever born by being asked for —
+ * `+`, `:new tab`, a modifier-click — which is why two of them may show the
+ * same object at once.
  */
 
 export type Mode = "normal" | "command" | "busy";
@@ -41,7 +48,7 @@ export function Tabline(props: {
 }) {
   return (
     <header className="vg-tabline">
-      <button type="button" className="vg-brand" onClick={props.onNew} title="open a new buffer">
+      <button type="button" className="vg-brand" onClick={props.onNew} title="duplicate this buffer">
         <img src="/mark.svg" alt="" width="14" height="14" />
         <span>dataplatform</span>
         <span className="vg-brand-version">v0.1</span>
@@ -88,7 +95,10 @@ export function Tabline(props: {
             </button>
           );
         })}
-        <button className="vg-tab vg-tab-new" onClick={props.onNew} aria-label="new buffer">
+        <button
+          className="vg-tab vg-tab-new"
+          onClick={props.onNew}
+          title="duplicate this buffer, then take one of the two somewhere else" aria-label="duplicate this buffer">
           +
         </button>
       </div>

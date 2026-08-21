@@ -95,23 +95,39 @@ registry, so they cannot disagree about what exists.
 | --- | --- |
 | `1`–`9` | jump to buffer *n* |
 | `j` / `k` | move the rail cursor |
-| `↵` | open the row under the cursor, or fold the branch under it |
+| `↵` | open the row under the cursor in this tab, or fold the branch under it |
+| `⇧↵` | open the row under the cursor in a new tab |
 | `:` | command line |
 | `/` or `f` | find a blob by key |
 | `⌘K` / `Ctrl+K` | command palette |
 | `⌘↵` | run the statement in the well |
 | `esc` | dismiss |
 
-`:close` closes the buffer you are in. `:density` switches comfortable and
-compact. `:gloss` hides the line under every section title. `:forget key`
-signs out.
+`:new tab` duplicates the buffer you are in and `:close` closes it. `:density`
+switches comfortable and compact. `:gloss` hides the line under every section
+title. `:forget key` signs out.
 
 ## Buffers and workspaces
 
 A tab is one open object — a table, a blob, or a workspace's overview — the way
-a buffer in an editor is one open file. Clicking a table or a blob opens it in
-its own tab, or focuses the tab that already holds it; the new tab lands beside
-the one you opened it from rather than at the end.
+a buffer in an editor is one open file. It is also a place you put yourself, the
+way a browser tab is, and the console treats it as yours:
+
+* **Clicking a table or a blob shows it in the tab you are in.** It never mints
+  a tab, and it never sends you off to some other tab that happens to hold the
+  same thing. Wherever you were looking is where the next thing appears.
+* **A tab is only ever born by being asked for** — `+` on the tabline, `:new
+  tab`, `⌘`- or middle-clicking a row in the rail, or `⇧↵` on the rail cursor.
+  `+` and `:new tab` hand you a second copy of where you are; the rail's
+  modifier-click opens the row you picked. Either way the new tab lands beside
+  the one you opened it from rather than at the end.
+* **The same object may sit in two tabs at once**, which is the point: open a
+  second tab and take one of the two somewhere else, and you can read them
+  side by side by flicking between `1`–`9`.
+
+Deleting a table or a blob does not close anything. Every tab that was pointing
+at it falls back to that workspace's overview, including tabs other than the one
+you deleted from — a tab is yours, and a delete is no reason to take it away.
 
 Which workspace you are in is a property of each buffer rather than of the
 window, so **two tabs can sit in two different workspaces at once**. That is why
