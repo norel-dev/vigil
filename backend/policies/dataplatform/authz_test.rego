@@ -215,6 +215,126 @@ test_denial_by_role_explains_the_role_held if {
 	contains(decision.reason, "viewer")
 }
 
+# --- changing membership ----------------------------------------------------
+
+# The shape a membership change arrives in. `current` is null for somebody who
+# is not in the project yet, which is what being let in for the first time
+# looks like.
+change(current, requested) := {"current_role": current, "requested_role": requested}
+
+manage_members(subject, membership_change) := {
+	"subject": subject,
+	"action": "project.manage_members",
+	"resource": bobs_project_resource,
+	"membership_change": membership_change,
+}
+
+test_an_admin_may_still_grant_every_role_below_owner if {
+	admin := with_role("admin", bobs_project)
+
+	every role in ["viewer", "editor", "admin"] {
+		authz.allow with input as manage_members(admin, change(null, role))
+	}
+}
+
+test_an_admin_may_not_promote_anybody_to_owner if {
+	admin := with_role("admin", bobs_project)
+
+	not authz.allow with input as manage_members(admin, change(null, "owner"))
+	not authz.allow with input as manage_members(admin, change("editor", "owner"))
+	not authz.allow with input as manage_members(admin, change("admin", "owner"))
+}
+
+test_an_owner_may_promote_somebody_to_owner if {
+	owner := with_role("owner", bobs_project)
+
+	authz.allow with input as manage_members(owner, change(null, "owner"))
+	authz.allow with input as manage_members(owner, change("admin", "owner"))
+}
+
+test_an_owner_may_not_demote_another_owner if {
+	owner := with_role("owner", bobs_project)
+
+	every role in ["viewer", "editor", "admin"] {
+		not authz.allow with input as manage_members(owner, change("owner", role))
+	}
+}
+
+test_an_admin_may_not_demote_an_owner_either if {
+	admin := with_role("admin", bobs_project)
+
+	not authz.allow with input as manage_members(admin, change("owner", "viewer"))
+}
+
+test_regranting_owner_to_an_owner_changes_nothing_and_is_left_alone if {
+	# The role the member ends up holding is the one they already held, so
+	# there is no demotion here for the rule against them to catch.
+	owner := with_role("owner", bobs_project)
+
+	authz.allow with input as manage_members(owner, change("owner", "owner"))
+}
+
+test_a_platform_admin_may_both_grant_and_take_away_owner if {
+	# Somebody has to be able to hand a project on once its owner is gone.
+	authz.allow with input as manage_members(root_subject, change(null, "owner"))
+	authz.allow with input as manage_members(root_subject, change("owner", "viewer"))
+}
+
+test_an_outsider_is_still_told_they_are_not_a_member if {
+	# The membership rules refuse this too, but the caller's problem is that
+	# they are not in the project at all, and that is what they hear.
+	decision := authz.decision with input as manage_members(
+		alice_subject,
+		change("owner", "viewer"),
+	)
+
+	decision.allow == false
+	contains(decision.reason, "is not a member of the project")
+}
+
+test_a_viewer_is_told_about_their_role_rather_than_the_owner_rule if {
+	# A viewer cannot manage members at all, so the membership rules are not
+	# what stopped them and are not what the answer blames.
+	decision := authz.decision with input as manage_members(
+		with_role("viewer", bobs_project),
+		change(null, "owner"),
+	)
+
+	decision.allow == false
+	contains(decision.reason, "viewer")
+	contains(decision.reason, "project.manage_members")
+}
+
+test_denial_of_an_owner_grant_says_only_an_owner_may_make_one if {
+	decision := authz.decision with input as manage_members(
+		with_role("admin", bobs_project),
+		change("editor", "owner"),
+	)
+
+	decision.allow == false
+	contains(decision.reason, "only an owner may grant the 'owner' role")
+}
+
+test_denial_of_an_owner_demotion_says_the_role_is_permanent if {
+	decision := authz.decision with input as manage_members(
+		with_role("owner", bobs_project),
+		change("owner", "admin"),
+	)
+
+	decision.allow == false
+	contains(decision.reason, "cannot be taken away once it is granted")
+}
+
+test_a_question_carrying_no_membership_change_is_untouched_by_these_rules if {
+	# Every other action in the platform arrives without a membership change,
+	# and must be decided exactly as it was before these rules existed.
+	authz.allow with input as {
+		"subject": with_role("admin", bobs_project),
+		"action": "project.update",
+		"resource": bobs_project_resource,
+	}
+}
+
 # --- tables -----------------------------------------------------------------
 
 test_a_viewer_may_read_a_table_and_read_from_it if {

@@ -74,7 +74,10 @@ role_permissions := {
 # Nothing is allowed unless a rule below says so.
 default allow := false
 
-allow if is_allowed(input.subject, input.action, input.resource)
+allow if {
+	is_allowed(input.subject, input.action, input.resource)
+	not membership_change_forbidden
+}
 
 # The decision the API reads, carrying an explanation it can hand back to the
 # caller when the answer is no.
@@ -109,6 +112,31 @@ reason := sprintf(
 	not allow
 	input.resource.scope == "project"
 	project_role
+	not is_allowed(input.subject, input.action, input.resource)
+}
+
+# A caller who may manage members and was still refused was refused by the
+# membership rules below, so the answer says which of them stopped them.
+reason := sprintf(
+	"%s may manage this project's members, but only an owner may grant the 'owner' role",
+	[input.subject.email],
+) if {
+	not allow
+	project_role
+	is_allowed(input.subject, input.action, input.resource)
+	membership_change_forbidden
+	input.membership_change.requested_role == "owner"
+}
+
+reason := sprintf(
+	"the 'owner' role cannot be taken away once it is granted, so %s may not lower this member",
+	[input.subject.email],
+) if {
+	not allow
+	project_role
+	is_allowed(input.subject, input.action, input.resource)
+	membership_change_forbidden
+	input.membership_change.requested_role != "owner"
 }
 
 # Filters a list of resources down to the ids the subject may act on, so that
@@ -122,7 +150,8 @@ allowed_resource_ids contains resource.id if {
 
 # Platform administrators are trusted everywhere. This is also the only rule
 # that ever allows a system scoped resource: there is deliberately no second
-# way to reach one.
+# way to reach one, and the only way a project whose owner has left can be
+# handed on to somebody else.
 is_allowed(subject, _, _) if subject.is_platform_admin
 
 # Everyone else acts on project scoped resources through the role they hold in
@@ -131,6 +160,38 @@ is_allowed(subject, action, resource) if {
 	resource.scope == "project"
 	role := subject.project_roles[resource.project_id]
 	action in role_permissions[role]
+}
+
+# --- the limits on changing membership --------------------------------------
+
+# 'project.manage_members' is not a single act. Handing somebody the 'owner'
+# role is not the same as handing them 'viewer', and taking 'owner' away is not
+# the same as granting it, so holding the permission is not on its own an answer
+# to whether a particular change may be made.
+#
+# A request that changes a membership therefore carries the role the member
+# holds now and the role being asked for, and the two rules below judge the
+# change itself, on top of the permission the caller holds. Every other question
+# carries no membership change at all, so neither rule can speak to one.
+default membership_change_forbidden := false
+
+# Only an owner may create another owner. An admin's power over membership stops
+# short of the role that outranks their own, or the ladder would have a rung
+# anybody standing below it could climb.
+membership_change_forbidden if {
+	not input.subject.is_platform_admin
+	input.membership_change.requested_role == "owner"
+	input.subject.project_roles[input.resource.project_id] != "owner"
+}
+
+# An owner is permanent. Nobody inside the project may lower one, another owner
+# included, and that covers an owner lowering themselves: co-owners hold the
+# project jointly, and one of them quietly unseating the other is exactly what
+# holding it jointly has to rule out.
+membership_change_forbidden if {
+	not input.subject.is_platform_admin
+	input.membership_change.current_role == "owner"
+	input.membership_change.requested_role != "owner"
 }
 
 # The role the caller holds in the project owning the resource of the question

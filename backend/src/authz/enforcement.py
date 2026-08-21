@@ -11,6 +11,7 @@ from loguru import logger
 from src.authz.policy import (
     Action,
     AuthorizationRequest,
+    MembershipChange,
     PolicyDecisionPoint,
     Resource,
     ResourceFilter,
@@ -45,6 +46,7 @@ class AccessEnforcer:
         subject: Subject,
         action: Action,
         resource: Resource,
+        membership_change: MembershipChange | None = None,
     ) -> None:
         """Return normally if the action is allowed, raise otherwise.
 
@@ -52,6 +54,9 @@ class AccessEnforcer:
             subject: The caller performing the action.
             action: The action being performed.
             resource: The object being acted on.
+            membership_change: The role change being attempted, for an action
+                that changes who belongs to a project. Left out otherwise,
+                because no other question has one to describe.
 
         Raises:
             PermissionDeniedError: If the policy denied the action.
@@ -59,7 +64,12 @@ class AccessEnforcer:
                 which case the action must not be performed either.
         """
         decision = await self._decision_point.decide(
-            request=AuthorizationRequest(subject=subject, action=action, resource=resource)
+            request=AuthorizationRequest(
+                subject=subject,
+                action=action,
+                resource=resource,
+                membership_change=membership_change,
+            )
         )
 
         if decision.allow:

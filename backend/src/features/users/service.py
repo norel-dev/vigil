@@ -21,6 +21,7 @@ __all__ = [
     "find_user_by_email",
     "get_user",
     "list_users",
+    "locate_user_by_email",
 ]
 
 
@@ -77,6 +78,23 @@ def get_user(*, session: Session, user_id: UUID) -> User:
     return user
 
 
+def locate_user_by_email(*, session: Session, email: str) -> User | None:
+    """Return the user registered with the address `email`, if there is one.
+
+    Looking somebody up and insisting they exist are separate questions, and
+    a caller who has not yet been allowed to ask about them should not learn
+    the answer from a failure. This one only looks.
+
+    Args:
+        session: The open database session.
+        email: The address to look up.
+
+    Returns:
+        User | None: The stored user, or None if nobody holds that address.
+    """
+    return session.exec(select(User).where(User.email == email)).first()
+
+
 def find_user_by_email(*, session: Session, email: str) -> User:
     """Return the user registered with the address `email`.
 
@@ -90,7 +108,7 @@ def find_user_by_email(*, session: Session, email: str) -> User:
     Raises:
         ObjectNotFoundError: If nobody holds that address.
     """
-    user = session.exec(select(User).where(User.email == email)).first()
+    user = locate_user_by_email(session=session, email=email)
     if user is None:
         raise ObjectNotFoundError(object_type="user", identifier=email)
 

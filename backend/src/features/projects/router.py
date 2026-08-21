@@ -11,13 +11,14 @@ from uuid import UUID
 from fastapi import APIRouter, Body, status
 from pydantic import BaseModel, EmailStr, Field
 
-from src.authz.policy import Action, Resource, ResourceType
+from src.authz.policy import Action, MembershipChange, Resource, ResourceType
 from src.features.projects import service as projects_service
 from src.features.projects.model import Project, ProjectRole
 from src.features.users import service as users_service
 from src.features.users.model import User
 from src.identity.caller import CurrentSubject, CurrentUser
 from src.platform.dependencies import DatabaseSession, Enforcer
+from src.platform.exceptions import ObjectNotFoundError
 
 __all__ = ["create_projects_router"]
 
@@ -165,15 +166,38 @@ def create_projects_router() -> APIRouter:
         This is how somebody is let into a project: once they hold a role,
         the policy starts allowing them the actions that role covers, both on
         the project itself and on whatever comes to sit under it.
+
+        Which role they hold now is as much a part of the question as the one
+        being asked for, because the policy draws lines the permission alone
+        does not: an owner is not a role every member manager may hand out,
+        and not one that may be taken back.
         """
         project = projects_service.get_project(session=session, project_id=project_id)
+
+        # The member is looked up before the decision but insisted on after
+        # it, so that a caller who may not manage this project's membership
+        # cannot use the refusal to learn which addresses the platform knows.
+        member = users_service.locate_user_by_email(session=session, email=body.email)
+        current_role = (
+            None
+            if member is None
+            else projects_service.member_role(
+                session=session, project_id=project_id, user_id=member.id
+            )
+        )
+
         await enforcer.ensure_allowed(
             subject=subject,
             action=Action.PROJECT_MANAGE_MEMBERS,
             resource=_as_resource(project=project),
+            membership_change=MembershipChange(
+                current_role=current_role, requested_role=body.role
+            ),
         )
 
-        member = users_service.find_user_by_email(session=session, email=body.email)
+        if member is None:
+            raise ObjectNotFoundError(object_type="user", identifier=body.email)
+
         membership = projects_service.set_member_role(
             session=session,
             project_id=project_id,

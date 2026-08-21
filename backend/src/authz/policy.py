@@ -24,6 +24,7 @@ __all__ = [
     "Action",
     "AuthorizationRequest",
     "Decision",
+    "MembershipChange",
     "PolicyDecisionPoint",
     "Resource",
     "ResourceFilter",
@@ -176,12 +177,42 @@ class Resource(BaseModel):
         return self.type.scope
 
 
+class MembershipChange(BaseModel):
+    """The membership a request means to write.
+
+    Holding `project.manage_members` is not on its own an answer to whether a
+    particular change may be made: handing somebody the owner role is not the
+    same act as handing them a viewer role, and taking the owner role away is
+    not the same act as granting it. Both roles travel with the request so
+    that the policy can tell those acts apart, rather than the API deciding in
+    advance which question is worth asking.
+    """
+
+    current_role: ProjectRole | None = Field(
+        default=None,
+        description=(
+            "The role the member holds now, or None if they are not yet a "
+            "member of the project."
+        ),
+    )
+    requested_role: ProjectRole = Field(
+        description="The role the caller is asking to give them."
+    )
+
+
 class AuthorizationRequest(BaseModel):
     """A single question posed to the policy: may `subject` do `action`?"""
 
     subject: Subject
     action: Action
     resource: Resource
+    membership_change: MembershipChange | None = Field(
+        default=None,
+        description=(
+            "The role change being attempted, for a request that changes who "
+            "belongs to a project. Absent from every other question."
+        ),
+    )
 
 
 class Decision(BaseModel):

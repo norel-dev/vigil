@@ -17,6 +17,7 @@ __all__ = [
     "get_project",
     "list_members",
     "list_projects",
+    "member_role",
     "roles_of_user",
     "set_member_role",
 ]
@@ -102,6 +103,30 @@ def roles_of_user(*, session: Session, user_id: UUID) -> dict[UUID, ProjectRole]
         select(ProjectMember).where(ProjectMember.user_id == user_id)
     ).all()
     return {membership.project_id: membership.role for membership in memberships}
+
+
+def member_role(
+    *,
+    session: Session,
+    project_id: UUID,
+    user_id: UUID,
+) -> ProjectRole | None:
+    """Return the role `user_id` holds in `project_id`, if they hold one.
+
+    Absence is an answer rather than a failure here: somebody who is not in
+    the project yet is exactly who a first grant of membership is about.
+
+    Args:
+        session: The open database session.
+        project_id: Identifier of the project.
+        user_id: Identifier of the user.
+
+    Returns:
+        ProjectRole | None: The role they hold, or None if they are not a
+            member of the project.
+    """
+    membership = session.get(ProjectMember, (project_id, user_id))
+    return None if membership is None else membership.role
 
 
 def set_member_role(

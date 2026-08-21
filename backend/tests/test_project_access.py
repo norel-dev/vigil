@@ -208,6 +208,191 @@ def test_granting_a_second_role_replaces_the_first(client: TestClient) -> None:
     assert alices[0]["role"] == "editor"
 
 
+# --- the limits on changing membership --------------------------------------
+
+
+def test_an_admin_may_grant_every_role_below_owner(client: TestClient) -> None:
+    """Managing members is still most of what an admin was let in to do."""
+    project_id = _create_project(client=client, caller="bob", name="bobs project")
+    _grant(
+        client=client,
+        project_id=project_id,
+        caller="bob",
+        email="alice@example.com",
+        role="admin",
+    )
+
+    for role in ("viewer", "editor", "admin"):
+        response = _grant(
+            client=client,
+            project_id=project_id,
+            caller="alice",
+            email="root@example.com",
+            role=role,
+        )
+        assert response.status_code == httpx.codes.OK, response.text
+        assert response.json()["role"] == role
+
+
+def test_an_admin_may_not_promote_anybody_to_owner(client: TestClient) -> None:
+    """An admin's reach over membership stops below the role above their own."""
+    project_id = _create_project(client=client, caller="bob", name="bobs project")
+    _grant(
+        client=client,
+        project_id=project_id,
+        caller="bob",
+        email="alice@example.com",
+        role="admin",
+    )
+
+    response = _grant(
+        client=client,
+        project_id=project_id,
+        caller="alice",
+        email="root@example.com",
+        role="owner",
+    )
+
+    assert response.status_code == httpx.codes.FORBIDDEN, response.text
+    assert "only an owner may grant the 'owner' role" in response.json()["reason"]
+
+
+def test_an_owner_may_promote_somebody_to_owner(client: TestClient) -> None:
+    """The role can still be handed out, by somebody who already holds it."""
+    project_id = _create_project(client=client, caller="bob", name="bobs project")
+
+    response = _grant(
+        client=client,
+        project_id=project_id,
+        caller="bob",
+        email="alice@example.com",
+        role="owner",
+    )
+
+    assert response.status_code == httpx.codes.OK, response.text
+    assert response.json()["role"] == "owner"
+
+
+def test_an_owner_may_not_demote_a_fellow_owner(client: TestClient) -> None:
+    """Owners hold the project jointly, so neither can unseat the other."""
+    project_id = _create_project(client=client, caller="bob", name="bobs project")
+    _grant(
+        client=client,
+        project_id=project_id,
+        caller="bob",
+        email="alice@example.com",
+        role="owner",
+    )
+
+    response = _grant(
+        client=client,
+        project_id=project_id,
+        caller="bob",
+        email="alice@example.com",
+        role="admin",
+    )
+
+    assert response.status_code == httpx.codes.FORBIDDEN, response.text
+    assert "cannot be taken away once it is granted" in response.json()["reason"]
+
+
+def test_an_owner_may_not_demote_themselves_either(client: TestClient) -> None:
+    """Stepping down is a demotion of an owner like any other."""
+    project_id = _create_project(client=client, caller="bob", name="bobs project")
+
+    response = _grant(
+        client=client,
+        project_id=project_id,
+        caller="bob",
+        email="bob@example.com",
+        role="viewer",
+    )
+
+    assert response.status_code == httpx.codes.FORBIDDEN, response.text
+
+
+def test_an_admin_may_not_demote_an_owner(client: TestClient) -> None:
+    """What an owner may not do to an owner, an admin may not do either."""
+    project_id = _create_project(client=client, caller="bob", name="bobs project")
+    _grant(
+        client=client,
+        project_id=project_id,
+        caller="bob",
+        email="alice@example.com",
+        role="admin",
+    )
+
+    response = _grant(
+        client=client,
+        project_id=project_id,
+        caller="alice",
+        email="bob@example.com",
+        role="viewer",
+    )
+
+    assert response.status_code == httpx.codes.FORBIDDEN, response.text
+
+
+def test_a_platform_administrator_may_hand_a_project_on(
+    client: TestClient, session: Session
+) -> None:
+    """Somebody has to be able to move a project whose owner has gone.
+
+    The rules above are about who inside a project may rearrange it. A
+    platform administrator is outside it, and is the one route left when the
+    only person who could have granted the role is no longer there to.
+    """
+    make_platform_admin(session=session, email="root@example.com")
+    project_id = _create_project(client=client, caller="bob", name="bobs project")
+
+    promoted = _grant(
+        client=client,
+        project_id=project_id,
+        caller="root",
+        email="alice@example.com",
+        role="owner",
+    )
+    assert promoted.status_code == httpx.codes.OK, promoted.text
+
+    demoted = _grant(
+        client=client,
+        project_id=project_id,
+        caller="root",
+        email="bob@example.com",
+        role="viewer",
+    )
+    assert demoted.status_code == httpx.codes.OK, demoted.text
+    assert demoted.json()["role"] == "viewer"
+
+
+def test_a_refusal_does_not_reveal_which_addresses_exist(client: TestClient) -> None:
+    """An outsider learns they are an outsider, and nothing about the users.
+
+    The member being granted a role has to be looked up before the decision
+    can be made, so the answer is checked here to be the refusal rather than
+    the lookup's failure.
+    """
+    project_id = _create_project(client=client, caller="bob", name="bobs project")
+
+    unknown = _grant(
+        client=client,
+        project_id=project_id,
+        caller="alice",
+        email="nobody@example.com",
+        role="viewer",
+    )
+    known = _grant(
+        client=client,
+        project_id=project_id,
+        caller="alice",
+        email="root@example.com",
+        role="viewer",
+    )
+
+    assert unknown.status_code == httpx.codes.FORBIDDEN, unknown.text
+    assert known.status_code == unknown.status_code
+
+
 # --- who is in a project ----------------------------------------------------
 
 
