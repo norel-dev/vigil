@@ -18,6 +18,7 @@ __all__ = [
     "list_members",
     "list_projects",
     "member_role",
+    "remove_member",
     "roles_of_user",
     "set_member_role",
 ]
@@ -157,6 +158,29 @@ def set_member_role(
     session.commit()
     session.refresh(membership)
     return membership
+
+
+def remove_member(*, session: Session, project_id: UUID, user_id: UUID) -> None:
+    """Take `user_id` out of `project_id` entirely.
+
+    The membership is deleted rather than emptied, because a member holding no
+    role and no member at all are the same thing to the policy, and keeping
+    both would give it two ways to say it.
+
+    Args:
+        session: The open database session.
+        project_id: The project to remove them from.
+        user_id: The user being removed.
+
+    Raises:
+        ObjectNotFoundError: If they are not a member of the project.
+    """
+    membership = session.get(ProjectMember, (project_id, user_id))
+    if membership is None:
+        raise ObjectNotFoundError(object_type="project member", identifier=str(user_id))
+
+    session.delete(membership)
+    session.commit()
 
 
 def list_members(*, session: Session, project_id: UUID) -> list[ProjectMember]:

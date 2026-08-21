@@ -58,6 +58,7 @@ admin_permissions := editor_permissions | {
 
 owner_permissions := admin_permissions | {
 	"project.delete",
+	"project.remove_members",
 	"table.create",
 	"table.delete",
 	"blob.create",
@@ -137,6 +138,18 @@ reason := sprintf(
 	is_allowed(input.subject, input.action, input.resource)
 	membership_change_forbidden
 	input.membership_change.requested_role != "owner"
+	input.membership_change.requested_role != null
+}
+
+reason := sprintf(
+	"the 'owner' role cannot be taken away once it is granted, so %s may not remove this member from the project",
+	[input.subject.email],
+) if {
+	not allow
+	project_role
+	is_allowed(input.subject, input.action, input.resource)
+	membership_change_forbidden
+	input.membership_change.requested_role == null
 }
 
 # Filters a list of resources down to the ids the subject may act on, so that
@@ -184,10 +197,14 @@ membership_change_forbidden if {
 	input.subject.project_roles[input.resource.project_id] != "owner"
 }
 
-# An owner is permanent. Nobody inside the project may lower one, another owner
-# included, and that covers an owner lowering themselves: co-owners hold the
-# project jointly, and one of them quietly unseating the other is exactly what
-# holding it jointly has to rule out.
+# An owner is permanent. Nobody inside the project may lower one or put one
+# out, another owner included, and that covers an owner doing it to themselves:
+# co-owners hold the project jointly, and one of them quietly unseating the
+# other is exactly what holding it jointly has to rule out.
+#
+# Removal arrives as a change ending in no role, so it is caught here rather
+# than by a rule of its own: being put out of a project is being taken below
+# every rung of the ladder at once, and the reason it is refused is the same.
 membership_change_forbidden if {
 	not input.subject.is_platform_admin
 	input.membership_change.current_role == "owner"

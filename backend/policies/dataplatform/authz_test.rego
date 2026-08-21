@@ -325,6 +325,76 @@ test_denial_of_an_owner_demotion_says_the_role_is_permanent if {
 	contains(decision.reason, "cannot be taken away once it is granted")
 }
 
+# --- removing a member ------------------------------------------------------
+
+# Removal is a change ending in no role at all, which is what `null` says here.
+removal(current) := {"current_role": current, "requested_role": null}
+
+remove_member(subject, membership_change) := {
+	"subject": subject,
+	"action": "project.remove_members",
+	"resource": bobs_project_resource,
+	"membership_change": membership_change,
+}
+
+test_an_owner_may_remove_every_role_below_owner if {
+	owner := with_role("owner", bobs_project)
+
+	every role in ["viewer", "editor", "admin"] {
+		authz.allow with input as remove_member(owner, removal(role))
+	}
+}
+
+test_an_admin_may_not_remove_anybody if {
+	# Managing members is not the same permission as deciding who is in the
+	# project, so holding the first says nothing about the second.
+	admin := with_role("admin", bobs_project)
+
+	every role in ["viewer", "editor", "admin"] {
+		not authz.allow with input as remove_member(admin, removal(role))
+	}
+}
+
+test_an_owner_may_not_remove_a_fellow_owner if {
+	owner := with_role("owner", bobs_project)
+
+	not authz.allow with input as remove_member(owner, removal("owner"))
+}
+
+test_an_owner_may_not_remove_themselves if {
+	# The rule does not ask who the member is, only what they hold, so an owner
+	# walking out is refused by the same line that refuses unseating another.
+	owner := with_role("owner", bobs_project)
+
+	not authz.allow with input as remove_member(owner, removal("owner"))
+}
+
+test_a_platform_admin_may_remove_an_owner if {
+	authz.allow with input as remove_member(root_subject, removal("owner"))
+}
+
+test_denial_of_removing_an_owner_says_the_role_is_permanent if {
+	decision := authz.decision with input as remove_member(
+		with_role("owner", bobs_project),
+		removal("owner"),
+	)
+
+	decision.allow == false
+	contains(decision.reason, "cannot be taken away once it is granted")
+	contains(decision.reason, "remove this member from the project")
+}
+
+test_an_admin_refused_a_removal_is_told_about_their_role if {
+	decision := authz.decision with input as remove_member(
+		with_role("admin", bobs_project),
+		removal("viewer"),
+	)
+
+	decision.allow == false
+	contains(decision.reason, "admin")
+	contains(decision.reason, "project.remove_members")
+}
+
 test_a_question_carrying_no_membership_change_is_untouched_by_these_rules if {
 	# Every other action in the platform arrives without a membership change,
 	# and must be decided exactly as it was before these rules existed.

@@ -210,4 +210,42 @@ def create_projects_router() -> APIRouter:
             role=membership.role,
         )
 
+    @router.delete(
+        "/{project_id}/members/{user_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+    async def remove_membership(
+        project_id: UUID,
+        user_id: UUID,
+        session: DatabaseSession,
+        enforcer: Enforcer,
+        subject: CurrentSubject,
+    ) -> None:
+        """Take a user out of a project, ending their access to everything in it.
+
+        Removal is the owner's to decide rather than every member manager's:
+        an admin shapes what the people in a project may do, while who is in
+        it at all is the owner's call. An owner cannot be removed, by a fellow
+        owner or by themselves, for the same reason one cannot be demoted.
+        """
+        project = projects_service.get_project(session=session, project_id=project_id)
+
+        # As with granting, what the member holds now is read before the
+        # decision and insisted on after it, so that a refusal says nothing
+        # about who belongs to a project the caller may not manage.
+        current_role = projects_service.member_role(
+            session=session, project_id=project_id, user_id=user_id
+        )
+
+        await enforcer.ensure_allowed(
+            subject=subject,
+            action=Action.PROJECT_REMOVE_MEMBERS,
+            resource=_as_resource(project=project),
+            membership_change=MembershipChange(current_role=current_role),
+        )
+
+        projects_service.remove_member(
+            session=session, project_id=project_id, user_id=user_id
+        )
+
     return router

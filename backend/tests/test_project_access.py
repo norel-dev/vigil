@@ -12,7 +12,7 @@ import httpx
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
-from tests.conftest import headers_for, make_platform_admin
+from tests.conftest import headers_for, make_platform_admin, user_id_of
 
 
 def _create_project(*, client: TestClient, caller: str, name: str) -> str:
@@ -391,6 +391,158 @@ def test_a_refusal_does_not_reveal_which_addresses_exist(client: TestClient) -> 
 
     assert unknown.status_code == httpx.codes.FORBIDDEN, unknown.text
     assert known.status_code == unknown.status_code
+
+
+# --- removing a member ------------------------------------------------------
+
+
+def _remove(*, client: TestClient, project_id: str, caller: str, target: str):
+    """Take `target` out of a project, as `caller`.
+
+    Args:
+        client: The test client.
+        project_id: The project they are being removed from.
+        caller: The name of the caller removing them.
+        target: The name of the caller being removed.
+
+    Returns:
+        httpx.Response: What the platform answered, refusals included, so that
+            a test can assert on one.
+    """
+    return client.delete(
+        f"/projects/{project_id}/members/{user_id_of(client=client, caller=target)}",
+        headers=headers_for(caller=caller),
+    )
+
+
+def test_an_owner_may_remove_a_member(client: TestClient) -> None:
+    """Removal ends the access the membership was what granted."""
+    project_id = _create_project(client=client, caller="bob", name="bobs project")
+    _grant(
+        client=client,
+        project_id=project_id,
+        caller="bob",
+        email="alice@example.com",
+        role="editor",
+    )
+
+    response = _remove(
+        client=client, project_id=project_id, caller="bob", target="alice"
+    )
+
+    assert response.status_code == httpx.codes.NO_CONTENT, response.text
+
+    shut_out = client.get(f"/projects/{project_id}", headers=headers_for(caller="alice"))
+    assert shut_out.status_code == httpx.codes.FORBIDDEN, shut_out.text
+
+    listed = client.get(
+        f"/projects/{project_id}/members", headers=headers_for(caller="bob")
+    )
+    assert [entry["email"] for entry in listed.json()] == ["bob@example.com"]
+
+
+def test_an_admin_may_not_remove_anybody(client: TestClient) -> None:
+    """Shaping what members may do is not deciding who the members are."""
+    project_id = _create_project(client=client, caller="bob", name="bobs project")
+    _grant(
+        client=client,
+        project_id=project_id,
+        caller="bob",
+        email="alice@example.com",
+        role="admin",
+    )
+    _grant(
+        client=client,
+        project_id=project_id,
+        caller="bob",
+        email="root@example.com",
+        role="viewer",
+    )
+
+    response = _remove(
+        client=client, project_id=project_id, caller="alice", target="root"
+    )
+
+    assert response.status_code == httpx.codes.FORBIDDEN, response.text
+    assert "project.remove_members" in response.json()["reason"]
+
+
+def test_an_owner_may_not_remove_a_fellow_owner(client: TestClient) -> None:
+    """Removal would be a way around the rule against demoting one."""
+    project_id = _create_project(client=client, caller="bob", name="bobs project")
+    _grant(
+        client=client,
+        project_id=project_id,
+        caller="bob",
+        email="alice@example.com",
+        role="owner",
+    )
+
+    response = _remove(
+        client=client, project_id=project_id, caller="bob", target="alice"
+    )
+
+    assert response.status_code == httpx.codes.FORBIDDEN, response.text
+    assert "cannot be taken away once it is granted" in response.json()["reason"]
+
+
+def test_an_owner_may_not_remove_themselves(client: TestClient) -> None:
+    """Walking out is refused by the same line that refuses being pushed."""
+    project_id = _create_project(client=client, caller="bob", name="bobs project")
+
+    response = _remove(client=client, project_id=project_id, caller="bob", target="bob")
+
+    assert response.status_code == httpx.codes.FORBIDDEN, response.text
+
+
+def test_a_platform_administrator_may_remove_an_owner(
+    client: TestClient, session: Session
+) -> None:
+    """The one route in when a project has to be cleared out from outside."""
+    make_platform_admin(session=session, email="root@example.com")
+    project_id = _create_project(client=client, caller="bob", name="bobs project")
+    _grant(
+        client=client,
+        project_id=project_id,
+        caller="bob",
+        email="alice@example.com",
+        role="owner",
+    )
+
+    response = _remove(
+        client=client, project_id=project_id, caller="root", target="alice"
+    )
+
+    assert response.status_code == httpx.codes.NO_CONTENT, response.text
+
+
+def test_removing_somebody_who_is_not_a_member_is_a_404(client: TestClient) -> None:
+    """There is no membership to end, so there is nothing the call did."""
+    project_id = _create_project(client=client, caller="bob", name="bobs project")
+
+    response = _remove(
+        client=client, project_id=project_id, caller="bob", target="alice"
+    )
+
+    assert response.status_code == httpx.codes.NOT_FOUND, response.text
+    assert "project member" in response.json()["detail"]
+
+
+def test_a_refused_removal_does_not_reveal_who_is_in_the_project(
+    client: TestClient,
+) -> None:
+    """An outsider hears the same refusal whether or not the target is a member."""
+    project_id = _create_project(client=client, caller="bob", name="bobs project")
+
+    a_member = _remove(
+        client=client, project_id=project_id, caller="alice", target="bob"
+    )
+    not_a_member = _remove(
+        client=client, project_id=project_id, caller="alice", target="root"
+    )
+
+    assert a_member.status_code == httpx.codes.FORBIDDEN, a_member.text
+    assert not_a_member.status_code == a_member.status_code
 
 
 # --- who is in a project ----------------------------------------------------

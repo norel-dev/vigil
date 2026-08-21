@@ -95,6 +95,10 @@ class Action(StrEnum):
     PROJECT_UPDATE = "project.update"
     PROJECT_DELETE = "project.delete"
     PROJECT_MANAGE_MEMBERS = "project.manage_members"
+    # Taking somebody out of a project is not the far end of adjusting their
+    # role, which is why it is an action of its own: an admin shapes what the
+    # people in a project may do, and an owner decides who is in it at all.
+    PROJECT_REMOVE_MEMBERS = "project.remove_members"
 
     DATASTORE_CREATE = "datastore.create"
     DATASTORE_READ = "datastore.read"
@@ -180,12 +184,16 @@ class Resource(BaseModel):
 class MembershipChange(BaseModel):
     """The membership a request means to write.
 
-    Holding `project.manage_members` is not on its own an answer to whether a
-    particular change may be made: handing somebody the owner role is not the
-    same act as handing them a viewer role, and taking the owner role away is
-    not the same act as granting it. Both roles travel with the request so
-    that the policy can tell those acts apart, rather than the API deciding in
+    Holding the permission is not on its own an answer to whether a particular
+    change may be made: handing somebody the owner role is not the same act as
+    handing them a viewer role, and taking the owner role away is not the same
+    act as granting it. Both ends of the change travel with the request so that
+    the policy can tell those acts apart, rather than the API deciding in
     advance which question is worth asking.
+
+    Removal is described here too, as a change ending in no role at all. That
+    is what lets one rule cover being lowered and being put out entirely,
+    which matters because they are the same loss to whoever it happens to.
     """
 
     current_role: ProjectRole | None = Field(
@@ -195,8 +203,12 @@ class MembershipChange(BaseModel):
             "member of the project."
         ),
     )
-    requested_role: ProjectRole = Field(
-        description="The role the caller is asking to give them."
+    requested_role: ProjectRole | None = Field(
+        default=None,
+        description=(
+            "The role the caller is asking them to end up holding, or None to "
+            "take them out of the project entirely."
+        ),
     )
 
 
