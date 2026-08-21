@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Drawn to the Vigil icon rules: square caps, miter joins, 1.5 stroke, no
+       fill, everything in the neutral foreground except one signal dot.
+       The glyph is the platform's thesis: shared strata of storage, and the
+       one object in them that belongs to you. -->
+  <g stroke="#ECE9E1" stroke-width="1.5" fill="none" stroke-linecap="square" stroke-linejoin="miter">
+    <rect x="5" y="5" width="54" height="54"></rect>
+    <line x1="5" y1="23" x2="59" y2="23"></line>
+    <line x1="5" y1="41" x2="59" y2="41"></line>
+  </g>
+  <rect x="29" y="29" width="6" height="6" fill="#E85D2F"></rect>
+</svg>

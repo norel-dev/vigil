@@ -1,0 +1,1385 @@
+/* =============================================================================
+   Vigil — Components
+
+   The visual vocabulary, and nothing else. Every value here resolves to a
+   --vg-* token from tokens.css; no component invents a colour, a size, or a
+   duration of its own.
+
+   Naming: one `vg-` prefix, `is-` for state, `has-` for opt-in structure.
+   Nothing here knows what the application does.
+   ============================================================================= */
+
+/* ─── Reset ─────────────────────────────────────────────────────────────── */
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body { overflow: hidden; margin: 0; }
+
+/* Monospace is the DEFAULT voice of the whole interface. Serif and sans are
+   opted into, element by element, by the few components that earn them. Build
+   it in this order — defaulting to sans and opting into mono produces a
+   subtly, definitely different product. */
+.vg-app, .vg-app *,
+.vg-modal, .vg-modal *,
+.vg-dialog, .vg-dialog *,
+.vg-palette, .vg-palette * {
+  font-family: var(--vg-font-mono);
+  letter-spacing: 0;
+}
+
+@keyframes vg-blink { 50% { opacity: 0; } }
+@keyframes vg-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@keyframes vg-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* =============================================================================
+   1 · SHELL
+   A fixed frame with exactly one scrolling region. This is what makes the
+   interface read as an application that is running rather than a page that is
+   displayed, and it is not optional.
+   ============================================================================= */
+
+.vg-app {
+  display: grid;
+  grid-template-rows: 30px 1fr 22px 28px;
+  grid-template-areas: "tabline" "main" "cmdline" "status";
+  height: 100vh;
+  background: var(--vg-base);
+  color: var(--vg-fg-primary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* Opt-in marquee row between canvas and command line. */
+.vg-app.has-ticker {
+  grid-template-rows: 30px 1fr 26px 22px 28px;
+  grid-template-areas: "tabline" "main" "ticker" "cmdline" "status";
+}
+
+/* ─── 1.1 Tabline ───────────────────────────────────────────────────────── */
+
+.vg-tabline {
+  grid-area: tabline;
+  border-bottom: 1px solid var(--vg-border);
+  background: var(--vg-base);
+  display: flex; align-items: stretch;
+  font-size: 11px;
+  color: var(--vg-fg-secondary);
+}
+
+/* A <button>, so it must undo the user-agent styling explicitly — otherwise
+   ButtonFace paints the corner of the tabline white on every platform. */
+.vg-brand {
+  display: flex; align-items: center; gap: 6px;
+  align-self: stretch;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--vg-border);
+  font: inherit;
+  letter-spacing: 0.05em;
+  color: var(--vg-fg-primary);
+  cursor: pointer;
+  transition: color var(--vg-dur-fast) var(--vg-ease);
+}
+.vg-brand:hover { color: var(--vg-interactive); }
+.vg-brand-version { color: var(--vg-fg-muted); font-size: 10px; }
+
+.vg-tabs { display: flex; align-items: stretch; flex: 0 1 auto; min-width: 0; overflow-x: auto; }
+.vg-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--vg-border);
+  color: var(--vg-fg-muted);
+  font-family: var(--vg-font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--vg-dur-fast) var(--vg-ease),
+              background var(--vg-dur-fast) var(--vg-ease);
+}
+.vg-tab:hover { color: var(--vg-fg-primary); background: var(--vg-surface); }
+.vg-tab.is-active {
+  color: var(--vg-fg-primary);
+  background: var(--vg-surface);
+  position: relative;
+}
+/* The active marker is a 2px accent bar on the TOP edge — not an underline,
+   not a fill. */
+.vg-tab.is-active::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--vg-interactive);
+}
+.vg-tab-num { color: var(--vg-fg-muted); font-size: 10px; }
+.vg-tab.is-active .vg-tab-num { color: var(--vg-interactive); }
+.vg-tab-mod { color: var(--vg-signal); font-size: 10px; }
+.vg-tab-x { color: var(--vg-fg-muted); margin-left: 4px; font-size: 13px; line-height: 1; }
+.vg-tab-x:hover { color: var(--vg-fg-primary); }
+.vg-tab-new { color: var(--vg-fg-muted); padding: 0 10px; font-size: 14px; }
+
+.vg-tabline-right { margin-left: auto; display: flex; align-items: stretch; }
+.vg-tool {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--vg-border);
+  color: var(--vg-fg-secondary);
+  font-family: var(--vg-font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color var(--vg-dur-fast) var(--vg-ease),
+              background var(--vg-dur-fast) var(--vg-ease);
+}
+.vg-tool:hover { color: var(--vg-fg-primary); background: var(--vg-surface); }
+.vg-tool.is-static { cursor: default; }
+.vg-tool.is-static:hover { background: transparent; color: var(--vg-fg-secondary); }
+
+/* ─── 1.2 Canvas ────────────────────────────────────────────────────────── */
+
+.vg-canvas {
+  grid-area: main;
+  overflow-y: auto;
+  position: relative;
+  background-color: var(--vg-base);
+  background-image: var(--vg-dotgrid);
+  background-size: var(--vg-dotgrid-size);
+}
+.vg-canvas-inner {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0 32px 40px 32px;
+}
+
+/* Opt-in: a fake line-number gutter, for surfaces that want the text-editor
+   metaphor stated outright rather than implied. */
+.vg-canvas.has-gutter {
+  background-image:
+    linear-gradient(to right, transparent 0, transparent 40px,
+      rgba(58, 66, 80, 0.25) 40px, rgba(58, 66, 80, 0.25) 41px, transparent 41px),
+    var(--vg-dotgrid);
+  background-size: 100% 100%, var(--vg-dotgrid-size);
+}
+
+/* ─── 1.3 Ticker ────────────────────────────────────────────────────────── */
+
+.vg-ticker {
+  grid-area: ticker;
+  background: var(--vg-base);
+  border-top: 1px solid var(--vg-border);
+  display: flex; align-items: stretch;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--vg-fg-secondary);
+}
+.vg-ticker-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 10px;
+  border-right: 1px solid var(--vg-border);
+  background: var(--vg-surface);
+  color: var(--vg-fg-primary);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.vg-ticker-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+  animation: vg-pulse 2s ease-in-out infinite;
+}
+/* The right edge fades rather than clipping — a headline sliced mid-word by a
+   hard border reads as a rendering fault. */
+.vg-ticker-track-wrap {
+  flex: 1; overflow: hidden; position: relative;
+  display: flex; align-items: center;
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 80px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 80px), transparent 100%);
+}
+.vg-ticker-track {
+  display: flex; align-items: center;
+  animation: vg-marquee 110s linear infinite;
+  will-change: transform;
+}
+.vg-ticker-track-wrap:hover .vg-ticker-track { animation-play-state: paused; }
+.vg-ticker-item {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  padding: 0 14px;
+  border-right: 1px solid var(--vg-border-faint);
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--vg-fg-primary);
+  font-size: 11.5px;
+  transition: color var(--vg-dur-fast) var(--vg-ease);
+}
+.vg-ticker-item:hover { color: var(--vg-interactive); }
+.vg-ticker-item-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; transform: translateY(-1px); }
+.vg-ticker-item-time { color: var(--vg-fg-muted); font-size: 10.5px; letter-spacing: 0.02em; }
+.vg-ticker-tail { display: inline-flex; align-items: center; flex-shrink: 0; border-left: 1px solid var(--vg-border); }
+.vg-ticker-tail-btn {
+  background: transparent; border: 0; border-left: 1px solid var(--vg-border);
+  color: var(--vg-fg-muted);
+  font-family: var(--vg-font-mono); font-size: 10px;
+  padding: 0 10px; cursor: pointer; align-self: stretch;
+  display: inline-flex; align-items: center; letter-spacing: 0.04em;
+}
+.vg-ticker-tail-btn:first-child { border-left: 0; }
+.vg-ticker-tail-btn:hover { color: var(--vg-fg-primary); }
+
+/* ─── 1.4 Command line ──────────────────────────────────────────────────── */
+
+.vg-cmdline {
+  grid-area: cmdline;
+  border-top: 1px solid var(--vg-border);
+  background: var(--vg-base);
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 12px;
+  font-size: 11.5px;
+  color: var(--vg-fg-primary);
+}
+.vg-cmdline-prompt { color: var(--vg-interactive); }
+.vg-cmdline-cursor { color: var(--vg-interactive); animation: vg-blink 1.1s steps(2, end) infinite; }
+.vg-cmdline-field {
+  flex: 1; min-width: 0;
+  background: transparent; border: 0; outline: 0;
+  color: var(--vg-fg-primary);
+  font-family: var(--vg-font-mono); font-size: 11.5px;
+  padding: 0;
+  caret-color: var(--vg-interactive);
+}
+/* Chrome fields opt out of the focus ring: the caret already says where you
+   are, and a ring inside a 22px bar is noise. */
+.vg-cmdline-field:focus-visible { box-shadow: none; }
+.vg-cmdline-msg { color: var(--vg-fg-secondary); }
+.vg-cmdline-msg.is-error { color: var(--vg-conf-low); }
+.vg-cmdline-hint { margin-left: auto; color: var(--vg-fg-muted); font-size: 10.5px; display: flex; gap: 12px; }
+.vg-cmdline-hint kbd {
+  color: var(--vg-fg-secondary);
+  border: 1px solid var(--vg-border-strong);
+  padding: 0 4px; font-size: 9px; margin-right: 4px;
+}
+
+/* ─── 1.5 Statusline ────────────────────────────────────────────────────── */
+
+/* The statusline is the one row that is always on screen and always being
+   glanced at rather than read, so it is set a step larger than the rest of the
+   chrome — 28px tall against the command line's 22px. */
+.vg-statusline {
+  grid-area: status;
+  background: var(--vg-base);
+  border-top: 1px solid var(--vg-border);
+  display: flex; align-items: stretch;
+  font-size: 11.5px;
+  color: var(--vg-fg-secondary);
+  letter-spacing: 0.02em;
+}
+.vg-seg {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 0 12px;
+  border-right: 1px solid var(--vg-border);
+  white-space: nowrap;
+}
+/* A segment that is also a control. It keeps the segment's dividing rule and
+   resets everything a user-agent button would otherwise paint. */
+.vg-seg.is-action {
+  background: none;
+  border: 0; border-right: 1px solid var(--vg-border);
+  font: inherit; letter-spacing: inherit;
+  color: var(--vg-fg-primary);
+  cursor: pointer;
+  transition: background var(--vg-dur-fast) var(--vg-ease),
+              color var(--vg-dur-fast) var(--vg-ease);
+}
+.vg-seg.is-action:hover { background: var(--vg-surface); color: var(--vg-interactive); }
+.vg-seg-twist { color: var(--vg-fg-muted); font-size: 9px; }
+.vg-seg:last-child { border-right: 0; }
+.vg-seg-spacer { flex: 1; border-right: 0; }
+.vg-seg-primary { color: var(--vg-fg-primary); }
+.vg-seg-muted   { color: var(--vg-fg-muted); }
+.vg-seg-ok      { color: var(--vg-conf-high); }
+.vg-seg-warn    { color: var(--vg-conf-med); }
+.vg-seg-alert   { color: var(--vg-signal); }
+
+/* The one place a saturated block of colour is allowed. */
+.vg-mode {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 11px;
+  padding: 0 14px;
+}
+.vg-mode.is-default  { background: var(--vg-interactive); color: var(--vg-fg-inverse); border-right-color: var(--vg-interactive); }
+.vg-mode.is-input    { background: var(--vg-conf-med);    color: var(--vg-fg-inverse); }
+.vg-mode.is-positive { background: var(--vg-conf-high);   color: var(--vg-fg-inverse); }
+.vg-mode.is-busy     { background: var(--vg-signal);      color: var(--vg-fg-inverse); }
+
+.vg-pulse {
+  width: 6px; height: 6px; background: currentColor; border-radius: 50%;
+  box-shadow: 0 0 6px currentColor;
+  animation: vg-pulse 2s ease-in-out infinite;
+}
+.vg-dot-alert { width: 6px; height: 6px; border-radius: 50%; background: var(--vg-signal); box-shadow: 0 0 6px var(--vg-signal); }
+
+/* =============================================================================
+   2 · LAYOUT PRIMITIVES
+   Three, deliberately. Composition happens by nesting these, not by inventing
+   a new grid per surface.
+   ============================================================================= */
+
+/* Vertical rhythm between sections. */
+.vg-stack { display: flex; flex-direction: column; gap: 30px; min-width: 0; }
+.vg-stack.is-tight { gap: 22px; }
+
+/* Rail beside content. The rail sticks; the content scrolls past it. */
+.vg-split {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 0 36px;
+  align-items: start;
+}
+.vg-split-rail { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 26px; }
+
+/* Unequal two-up. */
+.vg-cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
+.vg-cols.is-even { grid-template-columns: 1fr 1fr; }
+
+@media (max-width: 1100px) {
+  .vg-split { grid-template-columns: minmax(0, 1fr); gap: 26px; }
+  .vg-split-rail { position: static; }
+  .vg-cols { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .vg-cols.is-even { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* =============================================================================
+   3 · SECTION HEADER
+   The most-used component in the system. Every panel opens with one, and the
+   description line is mandatory — see the voice rules.
+   ============================================================================= */
+
+.vg-sect-head {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-bottom: 10px;
+  white-space: nowrap;
+}
+.vg-sect-title {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--vg-fg-primary);
+  font-weight: 600;
+}
+.vg-sect-count { font-size: 10.5px; color: var(--vg-fg-muted); }
+/* Sans, because it is a sentence. Everything else in this header is mono. */
+.vg-sect-desc {
+  font-family: var(--vg-font-sans);
+  font-size: 11.5px;
+  color: var(--vg-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Draws the rule out to the right. Nudged up so it sits on the baseline. */
+.vg-sect-fill {
+  flex: 1;
+  border-bottom: 1px solid var(--vg-border);
+  transform: translateY(-3px);
+  min-width: 24px;
+}
+.vg-sect-note { font-size: 10.5px; color: var(--vg-fg-muted); letter-spacing: 0.02em; }
+.vg-sect-right { display: inline-flex; gap: 8px; align-items: center; }
+
+/* Global switch for the description lines. */
+[data-gloss="off"] .vg-sect-desc { display: none; }
+
+/* The terminal-flavoured variant: ── name [n] ────────────  :right-action */
+.vg-rule {
+  display: flex; align-items: baseline; gap: 6px;
+  font-size: 11px; color: var(--vg-fg-secondary);
+  margin-bottom: 8px; white-space: nowrap; overflow: hidden;
+}
+.vg-rule-bracket { color: var(--vg-fg-muted); font-weight: 700; flex-shrink: 0; }
+.vg-rule-title { color: var(--vg-fg-primary); flex-shrink: 0; }
+.vg-rule-count { color: var(--vg-fg-muted); flex-shrink: 0; }
+.vg-rule-fill { color: var(--vg-fg-muted); overflow: hidden; flex: 1; }
+.vg-rule-right { color: var(--vg-fg-secondary); flex-shrink: 0; padding-left: 8px; }
+
+/* =============================================================================
+   4 · PAGE HEADER
+   ============================================================================= */
+
+.vg-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px 48px;
+  align-items: end;
+  padding: 26px 0 20px 0;
+  border-bottom: 1px solid var(--vg-border-strong);
+}
+.vg-eyebrow {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--vg-fg-secondary);
+  margin-bottom: 10px;
+}
+.vg-eyebrow .id { color: var(--vg-fg-muted); letter-spacing: 0.04em; text-transform: none; }
+.vg-title {
+  font-family: var(--vg-font-display);
+  font-weight: 600;
+  font-size: clamp(30px, 3.4vw, 44px);
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+  color: var(--vg-fg-primary);
+  margin: 0 0 8px 0;
+  text-wrap: balance;
+}
+.vg-title.is-small { font-size: clamp(22px, 2.4vw, 32px); letter-spacing: -0.012em; }
+/* The fourth voice: editorial italic, for subtitles and alternate names only. */
+.vg-subtitle {
+  font-family: var(--vg-font-editorial);
+  font-style: italic;
+  font-size: 14.5px;
+  color: var(--vg-fg-secondary);
+  letter-spacing: 0.01em;
+}
+.vg-subtitle .sep { color: var(--vg-fg-muted); font-style: normal; }
+.vg-head-side { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; padding-bottom: 2px; }
+.vg-head-meta { font-size: 11px; color: var(--vg-fg-muted); letter-spacing: 0.02em; display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* =============================================================================
+   5 · BUTTONS
+   Lowercase verbs. Outline-only emphasis — there is no filled primary button
+   anywhere in the system, by design.
+   ============================================================================= */
+
+.vg-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 5px 12px;
+  background: transparent;
+  border: 1px solid var(--vg-border-strong);
+  color: var(--vg-fg-secondary);
+  font-family: var(--vg-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--vg-dur-fast) var(--vg-ease),
+              border-color var(--vg-dur-fast) var(--vg-ease),
+              background var(--vg-dur-fast) var(--vg-ease);
+}
+.vg-btn:hover { color: var(--vg-fg-primary); border-color: var(--vg-interactive); background: var(--vg-surface); }
+.vg-btn.is-primary { border-color: var(--vg-interactive); color: var(--vg-interactive); }
+.vg-btn.is-primary:hover { background: rgba(122, 180, 192, 0.08); color: var(--vg-interactive); }
+.vg-btn.is-ghost { border-color: transparent; color: var(--vg-fg-muted); padding: 5px 8px; }
+.vg-btn.is-ghost:hover { color: var(--vg-interactive); border-color: transparent; background: transparent; }
+.vg-btn.is-on { border-color: var(--vg-interactive); color: var(--vg-fg-primary); background: var(--vg-surface-raised); }
+.vg-btn.is-danger { border-color: var(--vg-conf-low); color: var(--vg-conf-low); }
+.vg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Segmented group — shared borders collapse. */
+.vg-btn-group { display: inline-flex; }
+.vg-btn-group .vg-btn { border-right-width: 0; }
+.vg-btn-group .vg-btn:last-child { border-right-width: 1px; }
+
+/* Filled variant, for a control that is also a typed command. */
+.vg-btn-cmd {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 3px 9px;
+  background: var(--vg-surface);
+  border: 1px solid var(--vg-border-strong);
+  color: var(--vg-fg-secondary);
+  font-family: var(--vg-font-mono);
+  font-size: 10.5px; line-height: 1.4;
+  cursor: pointer; white-space: nowrap;
+  transition: color var(--vg-dur-fast) var(--vg-ease),
+              border-color var(--vg-dur-fast) var(--vg-ease),
+              background var(--vg-dur-fast) var(--vg-ease);
+}
+.vg-btn-cmd:hover { color: var(--vg-fg-primary); border-color: var(--vg-interactive); background: var(--vg-surface-raised); }
+.vg-btn-cmd:active { background: var(--vg-surface-sunken); }
+.vg-btn-cmd .cmd { color: var(--vg-interactive); }
+
+/* Bare icon/close control. */
+.vg-close {
+  background: none; border: none; padding: 0 4px;
+  color: var(--vg-fg-muted);
+  font-size: 20px; line-height: 1; cursor: pointer;
+}
+.vg-close:hover { color: var(--vg-fg-primary); }
+
+/* Toggle strip, e.g. layer or view switches. */
+.vg-toggle {
+  background: transparent; border: 0; border-left: 1px solid var(--vg-border);
+  padding: 2px 10px;
+  font-family: var(--vg-font-mono); font-size: 10px;
+  color: var(--vg-fg-muted); cursor: pointer;
+  transition: color var(--vg-dur-fast) var(--vg-ease);
+}
+.vg-toggle:hover { color: var(--vg-fg-secondary); }
+.vg-toggle.is-on { color: var(--vg-interactive); }
+
+/* =============================================================================
+   6 · CHIPS, TAGS, TOKENS
+   ============================================================================= */
+
+.vg-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 10px;
+  border: 1px solid var(--vg-border-strong);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--vg-fg-secondary);
+  white-space: nowrap;
+}
+.vg-chip .k { color: var(--vg-fg-muted); }
+.vg-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.vg-chip.is-high { border-color: rgba(122, 174, 126, 0.5); color: var(--vg-conf-high); }
+.vg-chip.is-med  { border-color: rgba(212, 166, 71, 0.5);  color: var(--vg-conf-med); }
+.vg-chip.is-low  { border-color: var(--vg-conf-low);       color: var(--vg-conf-low); }
+
+/* Status tag. Exactly one variant is filled — reserve it for the single most
+   urgent state in the product. */
+.vg-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  font-family: var(--vg-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+  text-transform: uppercase;
+  vertical-align: 1px;
+  border: 1px solid currentColor;
+  color: var(--vg-fg-muted);
+}
+.vg-tag.is-urgent   { background: var(--vg-signal); color: var(--vg-fg-inverse); border-color: var(--vg-signal); }
+.vg-tag.is-high     { color: var(--vg-conf-high); }
+.vg-tag.is-med      { color: var(--vg-conf-med); }
+.vg-tag.is-low      { color: var(--vg-conf-low); }
+
+/* Removable filter token. The one intentionally rounded element in the system:
+   it is a token, not a control, and the border turns red to signal removal. */
+.vg-token {
+  display: inline-flex; align-items: baseline; gap: 4px;
+  background: var(--vg-surface-raised);
+  border: 1px solid var(--vg-border);
+  border-radius: 10px;
+  color: var(--vg-fg-secondary);
+  font-family: var(--vg-font-mono); font-size: 10.5px;
+  padding: 3px 8px; cursor: pointer;
+}
+.vg-token:hover { border-color: var(--vg-conf-low); color: var(--vg-fg-primary); }
+.vg-token .x { color: var(--vg-fg-muted); }
+
+/* Keycap. */
+.vg-key {
+  border: 1px solid var(--vg-border-strong);
+  padding: 0 4px;
+  font-size: 9px;
+  color: var(--vg-fg-muted);
+  line-height: 14px;
+}
+
+/* =============================================================================
+   7 · FORM CONTROLS
+   ============================================================================= */
+
+.vg-input {
+  background: var(--vg-surface-raised);
+  border: 1px solid var(--vg-border);
+  border-radius: var(--vg-radius-1);
+  color: var(--vg-fg-primary);
+  font-family: var(--vg-font-mono);
+  font-size: 11.5px;
+  padding: 5px 8px;
+}
+.vg-input:focus { outline: none; border-color: var(--vg-interactive); box-shadow: none; }
+.vg-input:disabled { opacity: 0.5; }
+.vg-input::placeholder { color: var(--vg-fg-muted); }
+.vg-input.is-lg { font-size: 12px; padding: 7px 10px; }
+
+/* Prompt-style field: no chrome at all, just a caret after a coloured sigil. */
+.vg-field {
+  flex: 1; min-width: 0;
+  background: transparent; border: 0; outline: 0;
+  color: var(--vg-fg-primary);
+  font-family: var(--vg-font-mono); font-size: 12px;
+  caret-color: var(--vg-interactive);
+}
+.vg-field:focus-visible { box-shadow: none; }
+.vg-field::placeholder { color: var(--vg-fg-muted); }
+.vg-prompt { font-family: var(--vg-font-mono); font-size: 12px; color: var(--vg-interactive); }
+
+/* Inline find: a borderless field on a hairline, for narrowing a list in place
+   rather than in a dialog. Its sigil is `/` against the command line's `:`, so
+   the two prompts in the interface read the way they read in a terminal
+   editor. Like the command line it opts out of the focus ring, because the
+   accent caret already says where you are. */
+.vg-find {
+  display: flex; align-items: center; gap: 8px;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--vg-border);
+  transition: border-color var(--vg-dur-fast) var(--vg-ease);
+}
+.vg-find:focus-within { border-bottom-color: var(--vg-interactive); }
+.vg-find-sigil { flex-shrink: 0; color: var(--vg-fg-muted); font-size: 11px; }
+.vg-find:focus-within .vg-find-sigil { color: var(--vg-interactive); }
+.vg-find-input {
+  flex: 1; min-width: 0;
+  background: transparent; border: 0; outline: none;
+  color: var(--vg-fg-primary);
+  font-family: var(--vg-font-mono); font-size: 11.5px;
+}
+.vg-find-input:focus-visible { box-shadow: none; }
+.vg-find-input::placeholder { color: var(--vg-fg-muted); }
+.vg-find-clear {
+  flex-shrink: 0;
+  background: none; border: 0; cursor: pointer;
+  padding: 0 2px; line-height: 1;
+  color: var(--vg-fg-muted); font-size: 12px;
+  transition: color var(--vg-dur-fast) var(--vg-ease);
+}
+.vg-find-clear:hover { color: var(--vg-conf-low); }
+
+/* The run of a label that matched. A wash rather than a colour, so the text
+   keeps its own weight and the row still reads as one string. */
+.vg-mark {
+  background: rgba(122, 180, 192, 0.28);
+  color: var(--vg-fg-primary);
+  border-radius: 0;
+  padding: 0;
+}
+
+/* =============================================================================
+   8 · LISTS AND ROWS
+   ============================================================================= */
+
+.vg-list { display: flex; flex-direction: column; }
+.vg-listrow {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--vg-fg-primary);
+  border-bottom: 1px solid var(--vg-border-faint);
+  transition: background var(--vg-dur-fast) var(--vg-ease);
+}
+.vg-listrow:hover { background: var(--vg-surface); }
+.vg-listrow:last-child { border-bottom: 0; }
+.vg-listrow.is-head {
+  color: var(--vg-fg-secondary);
+  font-size: 10px;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--vg-border-strong);
+}
+.vg-listrow.is-head:hover { background: transparent; }
+.vg-listrow-n { width: 22px; flex-shrink: 0; color: var(--vg-fg-muted); font-size: 11px; text-align: right; }
+
+/* Keyboard cursor. An inset accent stripe, never a border that shifts layout. */
+.vg-listrow.is-cursor,
+.vg-eventrow.is-cursor {
+  background: var(--vg-surface);
+  box-shadow: inset 2px 0 0 var(--vg-interactive);
+}
+
+/* Unboxed rows separated by hairlines — for rails and dense inventories. */
+.vg-rows { display: flex; flex-direction: column; }
+.vg-thinrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px; align-items: baseline;
+  padding: 6px 2px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--vg-border);
+}
+.vg-thinrow:last-child { border-bottom: 0; }
+
+/* Boxed event list: time · dot · sentence · source. */
+.vg-eventlist { border: 1px solid var(--vg-border); background: var(--vg-base); }
+.vg-eventrow {
+  display: grid;
+  grid-template-columns: 56px 10px minmax(0, 1fr) auto;
+  gap: 0 14px;
+  align-items: baseline;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--vg-border-faint);
+  cursor: pointer;
+  transition: background var(--vg-dur-fast) var(--vg-ease);
+}
+.vg-eventrow:last-child { border-bottom: 0; }
+.vg-eventrow:hover { background: var(--vg-surface); }
+.vg-event-time { color: var(--vg-fg-muted); font-size: 11px; }
+.vg-event-dot { width: 7px; height: 7px; border-radius: 50%; align-self: center; justify-self: center; }
+.vg-event-body { min-width: 0; }
+/* Sans: this is a sentence meant to be read. */
+.vg-event-text { font-family: var(--vg-font-sans); font-size: 13px; line-height: 1.5; color: var(--vg-fg-primary); letter-spacing: 0; }
+.vg-event-text .vg-tag { margin-right: 8px; }
+.vg-event-src {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  font-size: 10.5px; color: var(--vg-fg-muted);
+  border: 1px solid transparent;
+  padding: 1px 7px; white-space: nowrap; text-decoration: none;
+  transition: color var(--vg-dur-fast) var(--vg-ease),
+              border-color var(--vg-dur-fast) var(--vg-ease);
+}
+.vg-event-src:hover { color: var(--vg-interactive); border-color: var(--vg-border-strong); }
+
+/* Side picker: a 2px accent stripe marks the selection, nothing moves. */
+.vg-pick {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  width: 100%; padding: 6px 8px;
+  background: none; border: none; border-left: 2px solid transparent;
+  color: var(--vg-fg-secondary);
+  font-family: var(--vg-font-mono); font-size: 11.5px;
+  text-align: left; cursor: pointer;
+}
+.vg-pick:hover { background: var(--vg-surface-raised); color: var(--vg-fg-primary); }
+.vg-pick.is-on { border-left-color: var(--vg-interactive); background: var(--vg-surface-raised); color: var(--vg-fg-primary); }
+.vg-pick-count { color: var(--vg-fg-muted); font-size: 10.5px; }
+.vg-pick-title { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--vg-fg-muted); padding: 0 8px 8px 8px; }
+
+/* ─── 8.6 Tree ──────────────────────────────────────────────────────────── */
+/* A hierarchy read out of names that contain separators, for stores whose keys
+   only look like paths. The branches are not objects — they are what the
+   separators imply — so they are drawn quieter than the leaves and carry a
+   count where a leaf carries a state.
+   Depth is passed in as `--vg-depth` on each row. */
+
+.vg-tree { --vg-tree-indent: 12px; display: flex; flex-direction: column; }
+.vg-treerow {
+  display: flex; align-items: baseline; gap: 6px;
+  width: 100%; min-width: 0;
+  padding: 4px 8px;
+  background-color: transparent;
+  border: 0; border-left: 2px solid transparent;
+  color: var(--vg-fg-secondary);
+  font-family: var(--vg-font-mono); font-size: 11.5px;
+  text-align: left; cursor: pointer;
+  transition: background-color var(--vg-dur-fast) var(--vg-ease),
+              color var(--vg-dur-fast) var(--vg-ease);
+  /* One hairline guide per level, so a leaf several deep can be traced back to
+     the branch it hangs from without counting indents. */
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--vg-border-faint) 0 1px,
+    transparent 1px var(--vg-tree-indent));
+  background-repeat: no-repeat;
+  background-size: calc(var(--vg-depth, 0) * var(--vg-tree-indent)) 100%;
+  background-position: 8px 0;
+}
+.vg-treerow:hover { background-color: var(--vg-surface-raised); color: var(--vg-fg-primary); }
+/* Open object and keyboard cursor are two separate facts and get two separate
+   marks: the accent stripe is what is open, the wash is where you are. */
+.vg-treerow.is-on { border-left-color: var(--vg-interactive); background-color: var(--vg-surface-raised); color: var(--vg-fg-primary); }
+.vg-treerow.is-cursor { background-color: var(--vg-surface); color: var(--vg-fg-primary); }
+.vg-treerow.is-on.is-cursor { background-color: var(--vg-surface-raised); }
+/* A branch is a consequence of the naming, not a thing in the store. */
+.vg-treerow.is-branch { color: var(--vg-fg-muted); }
+.vg-treerow.is-branch:hover { color: var(--vg-fg-secondary); }
+.vg-tree-rail { flex-shrink: 0; }
+.vg-tree-twist { width: 9px; flex-shrink: 0; color: var(--vg-fg-muted); font-size: 9px; }
+.vg-tree-caret { width: 7px; flex-shrink: 0; color: var(--vg-interactive); }
+.vg-tree-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.vg-tree-meta { margin-left: auto; flex-shrink: 0; padding-left: 8px; color: var(--vg-fg-muted); font-size: 10px; }
+.vg-tree-empty { padding: 6px 10px; font-family: var(--vg-font-mono); font-size: 11px; color: var(--vg-fg-muted); line-height: 1.5; }
+
+/* =============================================================================
+   9 · KEY–VALUE AND STATUS ROWS
+   ============================================================================= */
+
+.vg-kv {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 4px 0;
+  font-size: 11.5px;
+  border-bottom: 1px solid var(--vg-border-faint);
+}
+.vg-kv:last-child { border-bottom: 0; }
+.vg-kv-k { width: 84px; flex-shrink: 0; color: var(--vg-fg-muted); font-size: 10.5px; letter-spacing: 0.02em; }
+/* Right-aligned so the values form a clean edge regardless of key length. */
+.vg-kv-v {
+  flex: 1; min-width: 0;
+  color: var(--vg-fg-primary);
+  text-align: right;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+
+.vg-dotrow {
+  display: grid; grid-template-columns: 8px 1fr auto;
+  gap: 10px; align-items: center;
+  padding: 5px 0;
+  font-size: 11.5px;
+  border-bottom: 1px solid var(--vg-border-faint);
+}
+.vg-dotrow:last-child { border-bottom: 0; }
+.vg-dotrow-dot { width: 7px; height: 7px; border-radius: 50%; }
+.vg-dotrow-label { color: var(--vg-fg-secondary); }
+.vg-dotrow-value { color: var(--vg-fg-primary); font-size: 11px; }
+
+/* Definition grid. */
+.vg-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px 20px; margin: 0; }
+.vg-facts dt { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--vg-fg-muted); }
+.vg-facts dd { margin: 2px 0 0 0; font-size: 11.5px; color: var(--vg-fg-primary); }
+/* Plain-language gloss under a value. Jargon is defined at the point of use. */
+.vg-plain { display: block; font-size: 10.5px; color: var(--vg-fg-muted); margin-top: 2px; }
+
+/* Explanatory note under a module. Sans, because it is prose. */
+.vg-note { margin-top: 8px; font-family: var(--vg-font-sans); font-size: 10.5px; color: var(--vg-fg-muted); line-height: 1.5; }
+
+/* =============================================================================
+   10 · HEADLINE BANDS
+   ============================================================================= */
+
+/* Fact band. `is-attached` welds it to a page header directly above. */
+.vg-factband {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  border: 1px solid var(--vg-border);
+  background: var(--vg-surface);
+}
+.vg-factband.is-attached { border-top: 0; }
+.vg-fact { padding: 14px 18px 12px 18px; border-right: 1px solid var(--vg-border); min-width: 0; }
+.vg-fact:last-child { border-right: 0; }
+.vg-fact-label {
+  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--vg-fg-muted); margin-bottom: 5px;
+  display: flex; align-items: center; gap: 6px;
+}
+.vg-fact-value {
+  font-family: var(--vg-font-sans);
+  font-size: 16px; font-weight: 500; letter-spacing: -0.01em;
+  color: var(--vg-fg-primary); line-height: 1.25;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.vg-fact-meta { font-size: 10.5px; color: var(--vg-fg-muted); margin-top: 3px; letter-spacing: 0.02em; }
+
+/* Metric row. The dividers ARE the 1px gaps in the grid. */
+.vg-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1px;
+  background: var(--vg-border-faint);
+  border: 1px solid var(--vg-border-faint);
+}
+.vg-metric { background: var(--vg-base); padding: 14px 14px 12px 14px; min-width: 0; }
+.vg-metric.is-loading { opacity: 0.4; }
+/* Serif: a headline figure is a name for a quantity, not an identifier. */
+.vg-metric-value {
+  font-family: var(--vg-font-display);
+  font-size: clamp(20px, 2vw, 28px);
+  font-weight: 600; line-height: 1.05;
+  color: var(--vg-fg-primary); letter-spacing: -0.01em;
+}
+.vg-metric-label {
+  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--vg-fg-secondary); margin-top: 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.vg-metric-delta { font-family: var(--vg-font-mono); font-size: 10px; color: var(--vg-fg-muted); margin-top: 8px; }
+.vg-metric-delta.is-live { color: var(--vg-interactive); }
+
+/* =============================================================================
+   11 · TABLES
+   ============================================================================= */
+
+/* Real table, for records. Wide content scrolls in its own container. */
+.vg-table-scroll { overflow-x: auto; }
+.vg-table { width: 100%; border-collapse: collapse; font-family: var(--vg-font-mono); font-size: 11px; }
+.vg-table th { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--vg-border-strong); white-space: nowrap; }
+.vg-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--vg-border);
+  color: var(--vg-fg-secondary);
+  max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vg-table tbody tr:hover td { background: var(--vg-surface-raised); color: var(--vg-fg-primary); }
+.vg-th-sort {
+  background: none; border: none; padding: 0;
+  color: var(--vg-fg-muted); font: inherit;
+  letter-spacing: 0.08em; text-transform: uppercase; font-size: 10px; cursor: pointer;
+}
+.vg-th-sort:hover { color: var(--vg-fg-primary); }
+.vg-pager { display: flex; align-items: center; gap: 12px; padding-top: 14px; }
+.vg-pager-at { font-family: var(--vg-font-mono); font-size: 11px; color: var(--vg-fg-muted); }
+
+/* Grid "table", for mixed-media rows that need per-cell typography. Set
+   `grid-template-columns` on the parent per instance. */
+.vg-gridtable { border: 1px solid var(--vg-border); }
+.vg-gridtable-head,
+.vg-gridtable-row {
+  display: grid;
+  gap: 14px;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--vg-border-faint);
+}
+.vg-gridtable-head {
+  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--vg-fg-muted);
+  border-bottom: 1px solid var(--vg-border-strong);
+  background: var(--vg-surface);
+}
+.vg-gridtable-row { cursor: pointer; transition: background var(--vg-dur-fast) var(--vg-ease); }
+.vg-gridtable-row:hover { background: var(--vg-surface); }
+.vg-gridtable-row:last-child { border-bottom: 0; }
+.vg-cell-key   { font-size: 11.5px; color: var(--vg-fg-secondary); letter-spacing: 0.02em; }
+.vg-cell-value { font-family: var(--vg-font-sans); font-size: 13px; font-weight: 500; color: var(--vg-fg-primary); letter-spacing: 0; }
+.vg-cell-meta  { font-size: 10.5px; color: var(--vg-fg-muted); margin-top: 1px; }
+.vg-cell-num   { text-align: right; font-size: 11px; color: var(--vg-fg-secondary); }
+.vg-cell-grade { text-align: right; font-weight: 600; font-size: 12px; }
+
+/* =============================================================================
+   12 · METERS
+   Small, quantitative, and never animated.
+   ============================================================================= */
+
+/* Proportional bar: segments sum to 100%. */
+.vg-meter { display: flex; height: 4px; width: 100%; background: var(--vg-surface-sunken); border: 1px solid var(--vg-border-faint); }
+.vg-meter-seg { height: 100%; }
+
+/* Discrete alternative to a progress bar. */
+.vg-pips { display: inline-flex; gap: 3px; }
+.vg-pip { width: 12px; height: 3px; background: var(--vg-border-strong); }
+.vg-pip[data-on="true"] { background: var(--vg-interactive); }
+
+.vg-legend { display: flex; gap: 18px; margin-top: 8px; font-family: var(--vg-font-sans); font-size: 10.5px; color: var(--vg-fg-muted); }
+.vg-legend .sq { display: inline-block; width: 8px; height: 8px; margin-right: 5px; }
+
+/* =============================================================================
+   13 · CARDS AND TILES
+   ============================================================================= */
+
+.vg-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+.vg-card {
+  border: 1px solid var(--vg-border);
+  background: var(--vg-base);
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+  transition: border-color var(--vg-dur-fast) var(--vg-ease);
+}
+.vg-card:hover { border-color: var(--vg-border-strong); }
+/* Left accent stripe marks a card's status without tinting the whole surface. */
+.vg-card.has-stripe { border-left: 2px solid var(--vg-border-strong); background: var(--vg-surface-raised); }
+.vg-card.has-stripe.is-high { border-left-color: var(--vg-conf-high); }
+.vg-card.has-stripe.is-low  { border-left-color: var(--vg-conf-low); }
+.vg-card.is-inactive { opacity: 0.75; }
+
+.vg-card-top { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.vg-card-icon {
+  width: 28px; height: 28px;
+  border: 1px solid var(--vg-border-strong);
+  background: var(--vg-surface);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.vg-card-name {
+  font-family: var(--vg-font-sans); font-size: 13px; font-weight: 500;
+  color: var(--vg-fg-primary); letter-spacing: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vg-card-kind { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--vg-fg-muted); }
+.vg-card-score { font-size: 15px; font-weight: 600; }
+.vg-card-score .unit { font-size: 10px; color: var(--vg-fg-muted); font-weight: 400; margin-left: 1px; }
+/* Reasoning, pulled out as a quote. */
+.vg-card-note {
+  font-family: var(--vg-font-sans); font-size: 12px; line-height: 1.5;
+  color: var(--vg-fg-secondary); letter-spacing: 0;
+  border-left: 2px solid var(--vg-border-strong);
+  padding-left: 10px;
+}
+.vg-card-meta { font-size: 10.5px; color: var(--vg-fg-muted); display: flex; gap: 6px; flex-wrap: wrap; }
+.vg-card-meta .flag { color: var(--vg-signal); }
+.vg-card-actions { display: flex; gap: 8px; margin-top: 2px; padding-top: 10px; border-top: 1px solid var(--vg-border-faint); }
+
+/* Horizontal strip of fixed-width tiles. */
+.vg-strip { display: flex; gap: 14px; overflow-x: auto; padding: 4px 2px 12px 2px; align-items: start; }
+.vg-tile {
+  flex: 0 0 288px;
+  border: 1px solid var(--vg-border);
+  background: var(--vg-surface);
+  padding: 12px;
+  display: flex; flex-direction: column; gap: 9px;
+  min-width: 0;
+}
+.vg-tile-title {
+  background: transparent; border: 0; padding: 0; text-align: left;
+  font-family: inherit; font-size: 11px; line-height: 1.3;
+  color: var(--vg-interactive); cursor: pointer;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.vg-tile-title:hover { text-decoration: underline; }
+.vg-tile-title.is-absent { color: var(--vg-fg-muted); cursor: default; font-style: italic; }
+.vg-tile-body {
+  margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--vg-fg-secondary);
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical;
+}
+.vg-tile-foot { display: flex; gap: 6px; font-family: var(--vg-font-mono); font-size: 9.5px; color: var(--vg-fg-muted); margin-top: auto; }
+
+/* Media frame with a coordinate-space overlay. The media keeps its natural
+   aspect ratio and the SVG covers it exactly, so overlay coordinates need no
+   conversion. */
+.vg-frame { position: relative; line-height: 0; background: var(--vg-base); border: 1px solid var(--vg-border-faint); }
+.vg-frame img { display: block; width: 100%; height: auto; }
+.vg-frame-overlay { position: absolute; inset: 0; width: 100%; height: 100%; }
+.vg-frame-box { fill: none; stroke: var(--vg-interactive); stroke-width: 2; pointer-events: all; }
+.vg-frame-box:hover { fill: color-mix(in srgb, var(--vg-interactive) 18%, transparent); }
+.vg-frame.is-absent {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 120px; font-size: 10.5px; line-height: 1.4; color: var(--vg-fg-muted);
+}
+/* Placeholder for media that has not arrived. */
+.vg-imgslot {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 220px;
+  background-color: var(--vg-surface-sunken);
+  background-image: var(--vg-scanlines);
+  color: var(--vg-fg-muted);
+  font-family: var(--vg-font-mono); font-size: 10.5px; letter-spacing: 0.06em;
+  text-align: center; padding: 0 16px;
+}
+.vg-caption {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--vg-border);
+  font-family: var(--vg-font-mono); font-size: 10.5px; color: var(--vg-fg-muted);
+}
+.vg-caption .n { color: var(--vg-fg-primary); font-weight: 600; letter-spacing: 0.06em; }
+.vg-caption .src { margin-left: auto; white-space: nowrap; }
+
+/* Small labelled chips, e.g. under a media frame. */
+.vg-labels { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 5px; }
+.vg-label {
+  display: inline-flex; gap: 5px; align-items: baseline;
+  border: 1px solid var(--vg-border);
+  padding: 1px 6px;
+  font-family: var(--vg-font-mono); font-size: 9.5px;
+  color: var(--vg-fg-secondary);
+}
+/* Dashed means "known but unplaceable" — solid means present. */
+.vg-label.is-unplaced { border-style: dashed; color: var(--vg-fg-muted); }
+.vg-label .n { color: var(--vg-fg-muted); }
+
+/* =============================================================================
+   14 · NODE GRAPH
+   ============================================================================= */
+
+.vg-graph { position: relative; height: 340px; border: 1px solid var(--vg-border); background: var(--vg-surface-sunken); }
+.vg-node {
+  display: flex; flex-direction: column; gap: 1px;
+  min-width: 96px; max-width: 150px;
+  padding: 6px 9px;
+  border: 1px solid var(--vg-border-strong);
+  background: var(--vg-surface);
+  cursor: pointer;
+}
+.vg-node:hover { border-color: var(--vg-interactive); }
+.vg-node.is-focus { border-color: var(--vg-interactive); background: var(--vg-surface-raised); }
+.vg-node-name { font-size: 11.5px; color: var(--vg-fg-primary); line-height: 1.25; overflow-wrap: anywhere; }
+.vg-node.is-focus .vg-node-name { color: var(--vg-interactive); }
+.vg-node-kind { font-size: 9.5px; color: var(--vg-fg-muted); }
+.vg-node-meta { font-family: var(--vg-font-mono); font-size: 10px; color: var(--vg-fg-secondary); }
+
+/* Edges are drawn in the token palette, never a library default. A 1px line is
+   an unfair click target, so widen the invisible interaction stroke to 18px. */
+.vg-edge { stroke: var(--vg-border-strong); cursor: pointer; }
+.vg-edge:hover { stroke: var(--vg-interactive); }
+
+/* =============================================================================
+   15 · OVERLAYS
+   The only place shadows exist.
+   ============================================================================= */
+
+.vg-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 6vh; padding-bottom: 6vh;
+  overflow-y: auto;
+}
+.vg-overlay.is-heavy { background: rgba(0, 0, 0, 0.55); padding-top: 12vh; }
+
+/* Terminal modal: cyan border plus two corner brackets. The brackets are the
+   signature — they are what make it read as a floating window rather than a
+   card that happens to be centred. */
+.vg-modal {
+  width: 720px; max-width: 92vw; max-height: 86vh;
+  background: var(--vg-surface-raised);
+  border: 1px solid var(--vg-interactive);
+  box-shadow: 0 0 0 1px var(--vg-base), 0 20px 60px -20px rgba(0, 0, 0, 0.8);
+  display: flex; flex-direction: column;
+  position: relative;
+}
+.vg-modal::before, .vg-modal::after {
+  content: ''; position: absolute; width: 8px; height: 8px;
+  border: 1px solid var(--vg-interactive);
+  pointer-events: none;
+}
+.vg-modal::before { top: -4px; left: -4px; border-right: 0; border-bottom: 0; }
+.vg-modal::after  { bottom: -4px; right: -4px; border-left: 0; border-top: 0; }
+.vg-modal-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--vg-border-strong);
+  background: var(--vg-surface);
+  flex-shrink: 0; font-size: 11px;
+}
+.vg-modal-kind { color: var(--vg-interactive); letter-spacing: 0.08em; text-transform: lowercase; }
+.vg-modal-kind::before { content: ":"; color: var(--vg-fg-muted); margin-right: 1px; }
+.vg-modal-title { color: var(--vg-fg-primary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vg-modal-body { padding: 16px 18px; overflow-y: auto; font-size: 12.5px; }
+
+/* Plain dialog: the quieter of the two, for ordinary forms and choices. */
+.vg-dialog {
+  width: min(640px, 92vw);
+  background: var(--vg-surface);
+  border: 1px solid var(--vg-border-strong);
+  border-radius: var(--vg-radius-1);
+  padding: 18px 20px 20px 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.vg-dialog-head { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.vg-dialog-eyebrow { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--vg-fg-muted); }
+.vg-dialog-title { font-family: var(--vg-font-display); font-size: 20px; font-weight: 600; color: var(--vg-fg-primary); margin-top: 4px; }
+
+/* Command palette. */
+.vg-palette {
+  width: 640px; max-width: 90vw;
+  background: var(--vg-surface-raised);
+  border: 1px solid var(--vg-interactive);
+  box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.7);
+}
+.vg-palette-input-row { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--vg-border); }
+.vg-palette-cursor { color: var(--vg-interactive); animation: vg-blink 1.2s steps(2, end) infinite; }
+.vg-palette-input { flex: 1; background: transparent; border: 0; outline: none; color: var(--vg-fg-primary); font-family: var(--vg-font-mono); font-size: 14px; }
+.vg-palette-input:focus-visible { box-shadow: none; }
+.vg-palette-section { padding: 6px 14px; font-size: 10px; color: var(--vg-fg-secondary); letter-spacing: 0.04em; }
+.vg-palette-row {
+  display: grid; grid-template-columns: 18px 1fr 40px 40px;
+  align-items: center; gap: 10px;
+  padding: 6px 14px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+.vg-palette-row:hover { background: var(--vg-surface); }
+.vg-palette-row.is-selected { background: var(--vg-surface); border-left-color: var(--vg-interactive); }
+.vg-palette-key { color: var(--vg-interactive); font-size: 11px; }
+.vg-palette-desc { color: var(--vg-fg-primary); font-size: 12px; }
+.vg-palette-desc em { color: var(--vg-fg-secondary); font-style: normal; font-size: 11.5px; }
+.vg-palette-tag { font-size: 9.5px; color: var(--vg-fg-muted); }
+.vg-palette-foot { display: flex; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--vg-border); color: var(--vg-fg-muted); font-size: 10px; }
+.vg-palette kbd,
+.vg-modal kbd { border: 1px solid var(--vg-border-strong); padding: 1px 5px; font-size: 9.5px; color: var(--vg-fg-secondary); }
+
+/* Anchored popover. Clamp it inside its container rather than flipping it —
+   a panel that jumps to the other side of the cursor moves content away from
+   where the eye already is. */
+.vg-popover {
+  position: absolute; z-index: 20;
+  width: 310px; max-height: 300px; overflow-y: auto;
+  padding: 9px 10px;
+  border: 1px solid var(--vg-border-strong);
+  background: var(--vg-surface-raised);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+}
+.vg-popover-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.vg-popover-title { font-size: 11.5px; color: var(--vg-fg-primary); line-height: 1.3; }
+.vg-popover-meta { margin: 3px 0 7px; font-family: var(--vg-font-mono); font-size: 10px; color: var(--vg-fg-secondary); }
+.vg-popover-more { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--vg-border); font-size: 10.5px; color: var(--vg-fg-muted); line-height: 1.4; }
+
+/* Hover card, revealed from an inline reference. Opens on focus-within too, so
+   it is reachable from the keyboard. */
+.vg-ref { position: relative; color: var(--vg-interactive); border-bottom: 1px dotted var(--vg-interactive); cursor: pointer; white-space: nowrap; }
+.vg-hovercard {
+  position: absolute; left: 0; top: calc(100% + 6px); z-index: 70;
+  width: 264px; padding: 12px 14px;
+  background: var(--vg-surface-raised);
+  border: 1px solid var(--vg-border-strong);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  display: flex; flex-direction: column; gap: 6px;
+  white-space: normal;
+  opacity: 0; pointer-events: none; transform: translateY(2px);
+  transition: opacity var(--vg-dur-fast) var(--vg-ease),
+              transform var(--vg-dur-fast) var(--vg-ease);
+}
+.vg-ref:hover .vg-hovercard,
+.vg-ref:focus-within .vg-hovercard { opacity: 1; pointer-events: auto; transform: translateY(0); }
+
+/* Tooltip. Pure CSS, driven by a data attribute, so it works on any focusable
+   element without a portal. */
+.vg-tip { position: relative; }
+.vg-tip::after {
+  content: none;
+  position: absolute; left: 50%; bottom: calc(100% + 8px);
+  transform: translateX(-50%) translateY(2px);
+  width: max-content; max-width: 300px;
+  padding: 7px 10px;
+  background: var(--vg-surface-raised);
+  border: 1px solid var(--vg-interactive);
+  color: var(--vg-fg-primary);
+  font-family: var(--vg-font-mono);
+  font-size: 10.5px; font-style: normal; font-weight: 400;
+  line-height: 1.5; letter-spacing: 0; text-transform: none;
+  white-space: normal; text-align: left;
+  opacity: 0; pointer-events: none; z-index: 60;
+  transition: opacity var(--vg-dur-fast) var(--vg-ease),
+              transform var(--vg-dur-fast) var(--vg-ease);
+}
+.vg-tip::before {
+  content: none;
+  position: absolute; left: 50%; bottom: calc(100% + 1px);
+  transform: translateX(-50%);
+  color: var(--vg-interactive); font-size: 9px;
+  opacity: 0; z-index: 61; pointer-events: none;
+  transition: opacity var(--vg-dur-fast) var(--vg-ease);
+}
+.vg-tip:hover::after, .vg-tip:focus-visible::after { content: attr(data-tip); opacity: 1; transform: translateX(-50%) translateY(0); }
+.vg-tip:hover::before, .vg-tip:focus-visible::before { content: '▾'; opacity: 1; }
+.vg-tip.tip-left::after { left: 0; transform: translateX(0) translateY(2px); }
+.vg-tip.tip-left:hover::after, .vg-tip.tip-left:focus-visible::after { transform: translateX(0) translateY(0); }
+.vg-tip.tip-left::before { left: 14px; }
+.vg-tip.tip-right::after { left: auto; right: 0; transform: translateX(0) translateY(2px); }
+.vg-tip.tip-right:hover::after, .vg-tip.tip-right:focus-visible::after { transform: translateX(0) translateY(0); }
+.vg-tip.tip-right::before { left: auto; right: 14px; transform: none; }
+
+/* A term that carries a definition. */
+.vg-term { border-bottom: 1px dotted var(--vg-fg-muted); cursor: help; }
+.vg-term:hover { border-bottom-color: var(--vg-interactive); }
+
+/* =============================================================================
+   16 · PROSE AND MESSAGES
+   ============================================================================= */
+
+.vg-prose {
+  font-family: var(--vg-font-sans);
+  font-size: 13.5px; line-height: 1.7; letter-spacing: 0;
+  color: var(--vg-fg-primary);
+  max-width: 72ch;
+}
+.vg-prose p { margin: 0 0 12px 0; }
+.vg-prose p:last-child { margin-bottom: 0; }
+.vg-prose strong { font-weight: 600; }
+
+/* Superscript marker for a qualified statement. */
+.vg-marker {
+  font-family: var(--vg-font-mono);
+  font-size: 9px; letter-spacing: 0.06em;
+  color: var(--vg-conf-med);
+  border: 1px solid currentColor; border-radius: var(--vg-radius-1);
+  vertical-align: super; line-height: 1;
+  padding: 0 2px; margin-left: 2px; cursor: help;
+}
+
+.vg-msg { display: flex; flex-direction: column; gap: 4px; max-width: 92%; }
+.vg-msg.is-own { align-self: flex-end; align-items: flex-end; }
+.vg-msg-who { font-family: var(--vg-font-mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--vg-fg-muted); }
+.vg-msg-body {
+  font-family: var(--vg-font-sans);
+  font-size: 12.5px; line-height: 1.6;
+  color: var(--vg-fg-primary);
+  padding: 9px 12px;
+  border: 1px solid var(--vg-border);
+  background: var(--vg-surface);
+  white-space: pre-wrap;
+}
+.vg-msg.is-own .vg-msg-body { background: transparent; border-color: var(--vg-border-strong); color: var(--vg-fg-secondary); }
+.vg-msg-body .m { font-family: var(--vg-font-mono); font-size: 11px; color: var(--vg-interactive); }
+.vg-typing { font-family: var(--vg-font-mono); font-size: 11px; color: var(--vg-fg-muted); padding: 2px; }
+.vg-typing::after { content: '▌'; animation: vg-blink 1s steps(1) infinite; color: var(--vg-interactive); }
+
+/* Preformatted payload. */
+.vg-pre {
+  margin: 0; padding: 12px;
+  background: var(--vg-surface-raised);
+  border: 1px solid var(--vg-border);
+  border-radius: var(--vg-radius-1);
+  font-family: var(--vg-font-mono); font-size: 11px; line-height: 1.55;
+  color: var(--vg-fg-secondary);
+  max-height: 420px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word;
+}
+
+/* =============================================================================
+   17 · STATES
+   Solid border = empty. Dashed border = deliberately withheld. The difference
+   is load-bearing; do not collapse it.
+   ============================================================================= */
+
+.vg-empty {
+  border: 1px solid var(--vg-border);
+  padding: 28px;
+  text-align: center;
+  color: var(--vg-fg-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.vg-empty-inline { padding: 14px 2px; font-family: var(--vg-font-mono); font-size: 11.5px; color: var(--vg-fg-muted); }
+.vg-error {
+  padding: 8px 10px;
+  font-family: var(--vg-font-mono); font-size: 11.5px;
+  color: var(--vg-conf-low);
+  border: 1px solid var(--vg-conf-low);
+  border-radius: var(--vg-radius-1);
+}
+.vg-withheld {
+  padding: 16px;
+  border: 1px dashed var(--vg-border-strong);
+  border-radius: var(--vg-radius-1);
+  font-family: var(--vg-font-mono); font-size: 11.5px;
+  color: var(--vg-fg-muted);
+}
+
+/* Ordered progress list: every step is listed before anything runs, so the
+   reader sees what is going to happen rather than rows appearing from nowhere. */
+.vg-steps { list-style: none; margin: 0; padding: 0; }
+.vg-step {
+  display: grid; grid-template-columns: 18px 74px minmax(0, 1fr);
+  gap: 10px; align-items: baseline;
+  padding: 5px 0;
+  font-size: 11.5px; color: var(--vg-fg-muted);
+  border-bottom: 1px solid var(--vg-border-faint);
+}
+.vg-step:last-child { border-bottom: none; }
+.vg-step-mark { font-family: var(--vg-font-mono); text-align: center; }
+.vg-step-name { font-family: var(--vg-font-mono); letter-spacing: 0.06em; text-transform: uppercase; font-size: 10px; }
+.vg-step-desc { overflow: hidden; text-overflow: ellipsis; }
+.vg-step.is-pending { opacity: 0.5; }
+.vg-step.is-running { color: var(--vg-interactive); }
+.vg-step.is-done    { color: var(--vg-fg-secondary); }
+.vg-step.is-done .vg-step-mark { color: var(--vg-conf-high); }
+.vg-step.is-skipped .vg-step-mark { color: var(--vg-conf-med); }
+.vg-step.is-failed  { color: var(--vg-conf-low); }
+
+/* =============================================================================
+   18 · DENSITY
+   One switch on the shell root. Every surface honours it.
+   ============================================================================= */
+
+.vg-app[data-density="compact"] { font-size: 11.5px; }
+.vg-app[data-density="compact"] .vg-canvas-inner { padding: 0 24px 32px 24px; }
+.vg-app[data-density="compact"] .vg-head        { padding: 18px 0 14px 0; }
+.vg-app[data-density="compact"] .vg-title       { font-size: clamp(26px, 2.8vw, 36px); }
+.vg-app[data-density="compact"] .vg-stack       { gap: 22px; }
+.vg-app[data-density="compact"] .vg-fact        { padding: 10px 14px 9px 14px; }
+.vg-app[data-density="compact"] .vg-fact-value  { font-size: 14px; }
+.vg-app[data-density="compact"] .vg-metric      { padding: 8px 10px; }
+.vg-app[data-density="compact"] .vg-listrow     { padding: 4px 8px; font-size: 11.5px; }
+.vg-app[data-density="compact"] .vg-eventrow    { padding: 6px 12px; }
+.vg-app[data-density="compact"] .vg-event-text  { font-size: 12px; }
+.vg-app[data-density="compact"] .vg-gridtable-head,
+.vg-app[data-density="compact"] .vg-gridtable-row { padding: 6px 12px; }
+.vg-app[data-density="compact"] .vg-card        { padding: 10px 12px; gap: 8px; }
+.vg-app[data-density="compact"] .vg-prose       { font-size: 12.5px; line-height: 1.6; }
+
+/* =============================================================================
+   19 · UTILITIES
+   ============================================================================= */
+
+.vg-row-flex { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.vg-spacer   { flex: 1; }
+.vg-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.vg-break    { word-break: break-all; }

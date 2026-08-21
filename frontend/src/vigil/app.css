@@ -1,0 +1,631 @@
+/* =============================================================================
+   dataplatform console — application layer
+
+   tokens.css and components.css are the design system, vendored unmodified.
+   This file is the console's own composition: it names no colour, size or
+   duration of its own, and only resolves tokens, exactly as components.css
+   does. Everything here is prefixed `dp-`.
+   ============================================================================= */
+
+:root {
+  /* The one correction the handoff asks for rather than reproduces:
+     #5A5852 measures ≈2.8:1 on the ground and carries most of the metadata in
+     the system. #7C7A74 reaches 4.5:1 and stays clearly recessive against
+     --vg-fg-secondary. See §13 of VIGIL-DESIGN-SYSTEM.md. */
+  --vg-fg-muted: #7C7A74;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; overflow: hidden; }
+
+/* -- The key gate ----------------------------------------------------------- */
+/* The first screen: the dot grid, the mark, and a prompt. Nothing else. */
+
+.dp-gate {
+  /* Mono is the default voice of the interface, and this screen sits outside
+     the shell that normally establishes it. */
+  font-family: var(--vg-font-mono);
+  height: 100vh;
+  display: grid;
+  place-items: center;
+  background-color: var(--vg-base);
+  background-image: var(--vg-dotgrid);
+  background-size: var(--vg-dotgrid-size);
+  padding: var(--vg-s-4);
+}
+.dp-gate-panel { width: min(440px, 100%); }
+.dp-gate-mark { display: flex; align-items: center; gap: var(--vg-s-3); margin-bottom: var(--vg-s-6); }
+.dp-gate-mark img { display: block; }
+.dp-gate-wordmark {
+  font-family: var(--vg-font-mono);
+  font-size: var(--vg-size-meta);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--vg-fg-secondary);
+}
+
+/* -- Shell trim ------------------------------------------------------------- */
+
+.dp-canvas-inner { max-width: 1500px; }
+.dp-tab-name { max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The rail is the workspace's contents, and scrolls with the canvas. */
+.dp-rail-group + .dp-rail-group { margin-top: var(--vg-s-6); }
+.dp-rail-head { display: flex; align-items: baseline; gap: var(--vg-s-2); }
+.dp-rail-actions { display: flex; gap: var(--vg-s-2); margin-top: var(--vg-s-2); }
+.dp-pick-row { display: flex; align-items: baseline; gap: var(--vg-s-2); width: 100%; min-width: 0; }
+.dp-pick-row .dp-pick-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.dp-pick-row .dp-pick-tail { margin-left: auto; flex-shrink: 0; }
+
+/* -- Forms ------------------------------------------------------------------ */
+/* A field is a tracked micro label over a control, with an optional gloss line
+   beneath it. The gloss is the only sans in a form, because it is the only
+   sentence. */
+
+.dp-form { display: flex; flex-direction: column; gap: var(--vg-s-4); }
+.dp-field { display: flex; flex-direction: column; gap: var(--vg-s-1); min-width: 0; }
+.dp-field-label {
+  font-family: var(--vg-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--vg-fg-muted);
+}
+.dp-field-gloss {
+  font-family: var(--vg-font-sans);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--vg-fg-muted);
+  letter-spacing: 0;
+}
+.dp-field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--vg-s-3); }
+.dp-form-actions {
+  display: flex;
+  gap: var(--vg-s-2);
+  justify-content: flex-end;
+  padding-top: var(--vg-s-3);
+  border-top: 1px solid var(--vg-border-faint);
+}
+.dp-form-actions .vg-spacer { flex: 1; }
+
+/* Selects have to be styled from scratch: left alone, the user agent paints a
+   rounded light-mode control in the middle of a dark sharp-cornered system. */
+.dp-select {
+  appearance: none;
+  width: 100%;
+  background: var(--vg-surface-raised);
+  border: 1px solid var(--vg-border-strong);
+  border-radius: var(--vg-radius-0);
+  color: var(--vg-fg-primary);
+  font-family: var(--vg-font-mono);
+  font-size: 11.5px;
+  padding: 6px 26px 6px 9px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--vg-fg-muted) 50%),
+                    linear-gradient(135deg, var(--vg-fg-muted) 50%, transparent 50%);
+  background-position: right 12px center, right 7px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  transition: border-color var(--vg-dur-fast) var(--vg-ease);
+}
+.dp-select:hover { border-color: var(--vg-interactive); }
+.dp-select:focus { outline: none; border-color: var(--vg-interactive); box-shadow: none; }
+
+/* -- The column builder ----------------------------------------------------- */
+
+.dp-cols { border: 1px solid var(--vg-border); }
+.dp-col-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1.1fr) minmax(0, 1fr) auto 26px;
+  gap: var(--vg-s-2);
+  align-items: center;
+  padding: var(--vg-s-2) var(--vg-s-3);
+  border-bottom: 1px solid var(--vg-border-faint);
+}
+.dp-col-row:last-child { border-bottom: 0; }
+.dp-col-n { font-family: var(--vg-font-mono); font-size: 10px; color: var(--vg-fg-muted); text-align: right; }
+
+/* -- The statement well ----------------------------------------------------- */
+/* The console's one loud idea: the statement is never hidden. It is composed
+   here, shown before it runs, and the engine's own words come back below it. */
+
+.dp-well { border: 1px solid var(--vg-border-strong); background: var(--vg-surface-sunken); }
+.dp-well-head {
+  display: flex;
+  align-items: center;
+  gap: var(--vg-s-2);
+  padding: var(--vg-s-2) var(--vg-s-3);
+  border-bottom: 1px solid var(--vg-border);
+  font-family: var(--vg-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--vg-fg-muted);
+}
+.dp-well-head .dp-well-verb { color: var(--vg-interactive); letter-spacing: 0.08em; }
+.dp-well-body { display: flex; gap: var(--vg-s-2); padding: var(--vg-s-3); align-items: flex-start; }
+.dp-well-prompt { font-family: var(--vg-font-mono); font-size: 12px; color: var(--vg-interactive); padding-top: 2px; }
+.dp-well-input {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--vg-fg-primary);
+  font-family: var(--vg-font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  letter-spacing: var(--vg-track-data);
+  min-height: 56px;
+}
+.dp-well-input:focus-visible { box-shadow: none; }
+.dp-well-input::placeholder { color: var(--vg-fg-muted); }
+.dp-well-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--vg-s-3);
+  padding: var(--vg-s-2) var(--vg-s-3);
+  border-top: 1px solid var(--vg-border);
+  font-family: var(--vg-font-mono);
+  font-size: 10.5px;
+  color: var(--vg-fg-muted);
+}
+
+/* A statement shown before it runs. Read-only, and marked as such by the
+   prompt rather than by a disabled control. */
+.dp-sketch {
+  display: flex;
+  gap: var(--vg-s-2);
+  padding: var(--vg-s-3);
+  background: var(--vg-surface-sunken);
+  border: 1px solid var(--vg-border);
+  font-family: var(--vg-font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--vg-fg-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.dp-sketch .dp-sketch-prompt { color: var(--vg-interactive); flex-shrink: 0; }
+.dp-sketch .dp-sketch-body { min-width: 0; }
+.dp-sketch em { color: var(--vg-fg-muted); font-style: normal; }
+
+/* -- Media ------------------------------------------------------------------ */
+
+.dp-media { border: 1px solid var(--vg-border); background: var(--vg-surface-sunken); }
+.dp-media-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 260px;
+  max-height: 62vh;
+  padding: var(--vg-s-4);
+  background-image: var(--vg-scanlines);
+}
+.dp-media-stage img,
+.dp-media-stage video {
+  display: block;
+  max-width: 100%;
+  max-height: 56vh;
+  object-fit: contain;
+}
+
+/* A page is its own document and draws to its own edge, so the stage stops
+   framing it and gets out of the way. */
+.dp-media-stage.is-bare {
+  padding: 0;
+  min-height: 0;
+  /* The cap belongs to the framed stage. A player caps its own picture and
+     then adds a transport below it, so a cap here would crop the controls. */
+  max-height: none;
+  background-image: none;
+}
+.dp-page {
+  display: block;
+  width: 100%;
+  height: 62vh;
+  border: 0;
+  background: var(--vg-surface);
+}
+
+/* -- The transport ---------------------------------------------------------- */
+/* Built rather than borrowed: `controls` draws the browser's own chrome, which
+   is a different shape and weight in every browser and matches none of them
+   here. The seek bar stays a range input underneath the paint, so arrow keys,
+   Home, End and the screen reader's idea of a slider all still work. */
+
+.dp-transport {
+  display: flex;
+  align-items: center;
+  gap: var(--vg-s-3);
+  padding: var(--vg-s-2) var(--vg-s-3);
+  background: var(--vg-surface);
+  border-top: 1px solid var(--vg-border);
+}
+.dp-transport-key {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  width: 26px; height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--vg-border-strong);
+  border-radius: var(--vg-radius-1);
+  color: var(--vg-fg-secondary);
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--vg-dur-fast) var(--vg-ease),
+              border-color var(--vg-dur-fast) var(--vg-ease);
+}
+.dp-transport-key:hover { color: var(--vg-interactive); border-color: var(--vg-interactive); }
+.dp-transport-key:disabled { opacity: 0.4; cursor: not-allowed; }
+.dp-transport-key.is-quiet { border-color: transparent; }
+.dp-transport-key.is-quiet:hover { border-color: var(--vg-border-strong); }
+
+/* Tabular numerals and a fixed width: a clock whose digits change width makes
+   the whole bar shuffle sideways once a second. */
+.dp-transport-time {
+  flex-shrink: 0;
+  font-family: var(--vg-font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: var(--vg-num-tabular);
+  letter-spacing: var(--vg-track-data);
+  color: var(--vg-fg-primary);
+}
+.dp-transport-time.is-total { color: var(--vg-fg-muted); }
+
+.dp-transport-bar { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; }
+.dp-transport-bar input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 16px; margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.dp-transport-bar input[type="range"]:disabled { cursor: not-allowed; opacity: 0.5; }
+
+/* Three layers on one track: played, fetched-but-unplayed, and not yet here.
+   The middle one is why the bar is worth drawing at all — it is the only place
+   the console says whether a stall is the network or the file. */
+.dp-transport-bar input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: var(--vg-radius-1);
+  background:
+    linear-gradient(var(--vg-interactive), var(--vg-interactive)) left / var(--done) 100% no-repeat,
+    linear-gradient(var(--vg-border-strong), var(--vg-border-strong)) left / var(--ahead) 100% no-repeat,
+    var(--vg-border);
+}
+.dp-transport-bar input[type="range"]::-moz-range-track {
+  height: 3px;
+  border-radius: var(--vg-radius-1);
+  background:
+    linear-gradient(var(--vg-interactive), var(--vg-interactive)) left / var(--done) 100% no-repeat,
+    linear-gradient(var(--vg-border-strong), var(--vg-border-strong)) left / var(--ahead) 100% no-repeat,
+    var(--vg-border);
+}
+.dp-transport-bar input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 3px; height: 11px;
+  margin-top: -4px;
+  border: 0; border-radius: 0;
+  background: var(--vg-fg-primary);
+}
+.dp-transport-bar input[type="range"]::-moz-range-thumb {
+  width: 3px; height: 11px;
+  border: 0; border-radius: 0;
+  background: var(--vg-fg-primary);
+}
+.dp-transport-bar input[type="range"]:focus-visible { outline: none; }
+.dp-transport-bar input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px var(--vg-interactive-dim);
+}
+.dp-transport-bar input[type="range"]:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 3px var(--vg-interactive-dim);
+}
+
+/* -- The player and the deck ------------------------------------------------ */
+/* Video is a picture with a transport under it; audio is the transport alone.
+   The deck is not a picture frame around nothing for that reason. */
+
+.dp-player { display: flex; flex-direction: column; width: 100%; min-width: 0; }
+.dp-player video {
+  display: block;
+  width: 100%;
+  max-height: 56vh;
+  object-fit: contain;
+  background: var(--vg-surface-sunken);
+  cursor: pointer;
+}
+.dp-player:fullscreen { justify-content: center; background: var(--vg-base); }
+.dp-player:fullscreen video { max-height: none; flex: 1 1 auto; min-height: 0; }
+
+.dp-deck { display: flex; flex-direction: column; }
+.dp-deck-name {
+  display: flex; align-items: baseline; gap: var(--vg-s-3);
+  padding: var(--vg-s-4) var(--vg-s-3) var(--vg-s-3) var(--vg-s-3);
+  min-width: 0;
+  background-image: var(--vg-scanlines);
+}
+.dp-deck-key {
+  font-family: var(--vg-font-mono);
+  font-size: 12px;
+  color: var(--vg-fg-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dp-deck-meta {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: var(--vg-font-mono);
+  font-size: var(--vg-size-micro);
+  color: var(--vg-fg-muted);
+}
+.dp-deck .vg-withheld { margin: 0 var(--vg-s-3) var(--vg-s-3) var(--vg-s-3); }
+
+/* -- Printed source --------------------------------------------------------- */
+/* Html arrives here rather than in a frame: a blob is bytes someone uploaded,
+   and this page holds an api key. Showing the file is the honest answer and
+   usually the useful one. */
+
+.dp-source { border: 1px solid var(--vg-border); background: var(--vg-surface-sunken); }
+.dp-source-bar {
+  display: flex; align-items: center; gap: var(--vg-s-3);
+  padding: var(--vg-s-2) var(--vg-s-3);
+  border-bottom: 1px solid var(--vg-border);
+  background: var(--vg-surface);
+}
+.dp-source-count {
+  flex-shrink: 0;
+  font-family: var(--vg-font-mono);
+  font-size: var(--vg-size-micro);
+  font-variant-numeric: var(--vg-num-tabular);
+  color: var(--vg-fg-secondary);
+}
+.dp-source-note {
+  font-family: var(--vg-font-sans);
+  font-size: var(--vg-size-micro);
+  color: var(--vg-fg-muted);
+  min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dp-source-warn {
+  padding: var(--vg-s-2) var(--vg-s-3);
+  border-bottom: 1px solid var(--vg-border);
+  font-family: var(--vg-font-mono);
+  font-size: var(--vg-size-micro);
+  line-height: 1.5;
+  color: var(--vg-conf-med);
+}
+.dp-source-body {
+  margin: 0;
+  padding: var(--vg-s-3);
+  max-height: 62vh;
+  overflow: auto;
+  font-family: var(--vg-font-mono);
+  font-size: 11px;
+  line-height: var(--vg-lh-body);
+  color: var(--vg-fg-secondary);
+  tab-size: 2;
+}
+/* Wrapping is the default: minified markup is one line, and a reader who is
+   handed it unwrapped gets a single line several megabytes wide. */
+.dp-source-body.is-wrapped { white-space: pre-wrap; word-break: break-word; }
+
+/* The contact sheet: every blob in the workspace at a glance. */
+/* Hairlines are drawn by the shots themselves rather than by a painted gap:
+   a gap-coloured background fills the empty tracks of the last row too, and
+   reads as a large blank panel rather than as nothing being there. */
+.dp-sheet {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  border-top: 1px solid var(--vg-border-faint);
+  border-left: 1px solid var(--vg-border-faint);
+}
+.dp-shot {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--vg-base);
+  border: 0;
+  border-right: 1px solid var(--vg-border-faint);
+  border-bottom: 1px solid var(--vg-border-faint);
+  border-left: 2px solid transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: background var(--vg-dur-fast) var(--vg-ease),
+              border-color var(--vg-dur-fast) var(--vg-ease);
+}
+.dp-shot:hover { background: var(--vg-surface); }
+.dp-shot.is-on { border-left-color: var(--vg-interactive); background: var(--vg-surface); }
+.dp-shot-stage {
+  position: relative;
+  display: flex;
+  height: 128px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-color: var(--vg-surface-sunken);
+  background-image: var(--vg-scanlines);
+}
+.dp-shot-stage img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dp-shot-stage video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dp-shot-glyph {
+  font-family: var(--vg-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--vg-fg-muted);
+  padding: 0 var(--vg-s-3);
+  text-align: center;
+  line-height: 1.5;
+}
+/* Recorded, never filled — the state the API models explicitly. Dashed, per
+   §9: solid means empty, dashed means deliberately not there. */
+.dp-shot-stage.is-hollow { border-bottom: 1px dashed var(--vg-border-strong); }
+.dp-shot-caption { display: block; padding: var(--vg-s-2) var(--vg-s-3) 9px var(--vg-s-3); min-width: 0; overflow: hidden; }
+.dp-shot-key {
+  display: block;
+  max-width: 100%;
+  font-family: var(--vg-font-mono);
+  font-size: 11px;
+  color: var(--vg-fg-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dp-shot-meta {
+  display: block;
+  font-family: var(--vg-font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  color: var(--vg-fg-muted);
+  margin-top: 2px;
+}
+
+/* -- The drop target -------------------------------------------------------- */
+
+.dp-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--vg-s-2);
+  padding: var(--vg-s-8) var(--vg-s-4);
+  border: 1px dashed var(--vg-border-strong);
+  background: var(--vg-surface-sunken);
+  color: var(--vg-fg-muted);
+  font-family: var(--vg-font-mono);
+  font-size: 11.5px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color var(--vg-dur-fast) var(--vg-ease),
+              color var(--vg-dur-fast) var(--vg-ease);
+}
+.dp-drop:hover, .dp-drop.is-over { border-color: var(--vg-interactive); color: var(--vg-fg-secondary); }
+.dp-drop.is-loaded { border-style: solid; border-color: var(--vg-border); color: var(--vg-fg-secondary); }
+
+/* -- Misc ------------------------------------------------------------------- */
+
+.dp-scroll-y { display: flex; flex-direction: column; gap: var(--vg-s-3); max-height: 420px; overflow-y: auto; padding-right: var(--vg-s-1); }
+.dp-inline-code {
+  font-family: var(--vg-font-mono);
+  font-size: 11px;
+  color: var(--vg-fg-secondary);
+  /* Break between words, never inside one: a path split mid-token reads as a
+     rendering fault rather than as a wrap. */
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.dp-fill { flex: 1; }
+.dp-cell-null { color: var(--vg-fg-muted); font-style: italic; }
+.dp-toast-slot { position: fixed; inset: auto 0 52px 0; display: flex; justify-content: center; pointer-events: none; }
+
+/* Reduced motion: the system's whole inventory of movement is colour fades,
+   a blink and a pulse. Blinking and pulsing are the ones worth stopping. */
+@media (prefers-reduced-motion: reduce) {
+  .vg-cmdline-cursor,
+  .vg-palette-cursor,
+  .vg-pulse { animation: none; }
+}
+
+@media (max-width: 760px) {
+  .dp-field-pair { grid-template-columns: minmax(0, 1fr); }
+  .dp-col-row { grid-template-columns: 16px minmax(0, 1fr) minmax(0, 1fr) auto 24px; }
+}
+
+/* -- Pickers ---------------------------------------------------------------- */
+
+.vg-pick { min-width: 0; }
+
+/* -- Identifiers keep their own case ---------------------------------------- */
+/* tokens.css gives `.vg-label` tracked caps and components.css redefines it as
+   a small bordered chip without resetting that, so the tracked caps survive.
+   Column names are identifiers a reader will type back into a statement, and
+   must render exactly as the engine reports them — including their case. The
+   same applies to a field labelled after a column. */
+
+.vg-labels .vg-label,
+.dp-field-label.is-identifier,
+.dp-well-subject {
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+.dp-field-label.is-identifier { font-size: 10.5px; }
+
+/* -- Reflow, not redesign --------------------------------------------------- */
+/* The design system's own breakpoints handle the two-ups and the rail. These
+   are the two places the console's own chrome would otherwise overflow: a page
+   header whose action cluster is wider than the column it sits in, and a
+   command line whose keycap hints have nowhere to go. */
+
+@media (max-width: 900px) {
+  .vg-head { grid-template-columns: minmax(0, 1fr); }
+  .vg-head-side { align-items: flex-start; }
+  .vg-cmdline-hint { display: none; }
+  .dp-seg-optional { display: none; }
+}
+
+/* -- The shell must not be wider than the window ---------------------------- */
+/* `.vg-app` is a single-column grid, and an implicit `auto` column is sized by
+   the min-content of its widest row. A tabline holding several workspaces
+   therefore sets a floor the viewport cannot fall below, and the right end of
+   the statusline is clipped off the screen rather than reflowing. Pin the
+   column to the viewport and let each row shrink inside it; the tabs already
+   scroll on their own. */
+
+.vg-app { grid-template-columns: minmax(0, 1fr); }
+.vg-tabline,
+.vg-canvas,
+.vg-cmdline,
+.vg-statusline { min-width: 0; }
+
+/* The context segment names the whole path to what is open, so it is the one
+   segment that can be arbitrarily long. It gives way first. */
+.dp-seg-context { min-width: 0; }
+.dp-seg-context > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.dp-tool-who { max-width: 20ch; overflow: hidden; text-overflow: ellipsis; }
+
+@media (max-width: 620px) {
+  .dp-tool-who { display: none; }
+}
+
+/* -- Buffers ---------------------------------------------------------------- */
+/* A tab is an open object, so it says which kind of object before it says the
+   name. The sigil is a glyph rather than a word because the tabline is the one
+   row in the shell with no space to spare. */
+
+.dp-tab-sigil { color: var(--vg-fg-muted); font-size: 9px; flex-shrink: 0; }
+.vg-tab.is-active .dp-tab-sigil { color: var(--vg-interactive); }
+.dp-tab-name { max-width: 20ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* -- The workspace segment -------------------------------------------------- */
+/* Which workspace you are in is window state rather than document state, so it
+   sits in the statusline. Its picker is the one popover in the console that
+   opens upward, because there is nothing below it to open into. */
+
+.dp-seg-host { position: relative; display: flex; }
+.dp-seg-ws { color: var(--vg-fg-primary); }
+.dp-wspicker {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: 280px;
+  max-width: 90vw;
+  padding: var(--vg-s-3) 0 0 0;
+  z-index: 120;
+}
+.dp-wspicker .vg-pick-title { padding: 0 var(--vg-s-3) var(--vg-s-2) var(--vg-s-3); }
+.dp-wspicker-list { max-height: 40vh; overflow-y: auto; }
+.dp-wspicker-foot {
+  display: flex;
+  padding: var(--vg-s-2) var(--vg-s-2);
+  margin-top: var(--vg-s-2);
+  border-top: 1px solid var(--vg-border);
+}
