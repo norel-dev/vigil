@@ -148,10 +148,21 @@ before one claiming the family it belongs to, or `text/` would swallow
 
 **HTML is shown as source and never rendered.** A blob is bytes someone
 uploaded to a project, and this page holds an API key; rendering would run a
-stranger's markup beside it. That decision is also what makes the pdf frame
-safe without a `sandbox` attribute — a browser dispatches on the response's
-`Content-Type`, so bytes that could execute as markup are bytes the registry
-routed to the source viewer and never handed to a frame.
+stranger's markup beside it.
+
+**The registry's vote and the browser's vote are counted differently, and the
+pdf viewer is where that bites.** The registry may pick a viewer from the key
+when the stored type says nothing useful, but a browser decides what to do with
+a response from its `Content-Type` header alone — so a pdf the store labelled
+`application/octet-stream` is routed to the pdf viewer by its name and then
+*downloaded* rather than drawn, because octet-stream is the header that means
+"save this". Where the header already says pdf, the frame is pointed at the
+signed URL and the browser streams it; where it does not, the bytes are fetched
+once, checked for the `%PDF-` signature, and handed back through a blob URL
+carrying the type. The signature check is what keeps the name from being taken
+as evidence, and it is also why the frame needs no `sandbox` attribute: nothing
+reaches it that has not either been labelled a pdf by the store or shown itself
+to be one.
 
 Source is the one viewer that must hold a whole blob to do its job, so it is
 the only one with a ceiling: past 1 MB it says so and points at the file
