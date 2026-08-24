@@ -19,6 +19,7 @@ from src.features.datastores.storage import DataStoreQuery, DataStoreQueryRespon
 from src.features.tables.storage import (
     ColumnDefinition,
     QueryPrivilege,
+    primary_key_of,
     validate_identifier,
 )
 from src.platform.exceptions import (
@@ -139,6 +140,7 @@ class SQLiteDataStore(DataStoreImplementationBase):
 
         Raises:
             TableProvisioningError: If the table could not be created.
+            ValueError: If the columns do not describe a usable primary key.
         """
         validate_identifier(name=name, kind="table name")
         if not columns:
@@ -147,10 +149,19 @@ class SQLiteDataStore(DataStoreImplementationBase):
                 "must have at least one."
             )
 
+        key = primary_key_of(columns=columns)
+
         definitions = ", ".join(
             f"{column.name} {column.type}" + ("" if column.nullable else " NOT NULL")
             for column in columns
         )
+        if key:
+            # A key of one column is written the same way as a key of several,
+            # because SQLite reads the two forms alike: a lone INTEGER column
+            # named in this clause still becomes an alias for the rowid, just
+            # as it would had PRIMARY KEY been written against the column
+            # itself. One form for both keeps this from having two cases.
+            definitions += f", PRIMARY KEY ({', '.join(key)})"
 
         try:
             with self._connect(database=self._database_for(namespace=namespace)) as connection:

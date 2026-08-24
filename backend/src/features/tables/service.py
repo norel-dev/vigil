@@ -146,7 +146,8 @@ async def create_table(
         ObjectNotFoundError: If the datastore does not exist.
         UnsuitableDataStoreError: If the datastore does not hold tables.
         DuplicateObjectError: If the project already has a table with that name.
-        ValueError: If the name is not usable as a SQL identifier.
+        ValueError: If the name is not usable as a SQL identifier, or if the
+            columns do not describe a usable primary key.
         TableProvisioningError: If the storage could not be created.
     """
     # The name the caller picks is the name they will write in their SQL, so

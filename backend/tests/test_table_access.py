@@ -324,6 +324,67 @@ def test_a_table_with_no_columns_is_refused(client: TestClient, warehouse: str) 
     }, created.text
 
 
+def test_a_key_column_that_may_hold_no_value_is_refused_at_the_door(
+    client: TestClient, warehouse: str
+) -> None:
+    """A caller who contradicted themselves is told so, not quietly obeyed.
+
+    Unlike a column type, this is not something only the engine can judge:
+    SQLite would take the table and then allow NULLs in its key, so the
+    platform refuses the request rather than creating a table that is not the
+    one that was asked for.
+    """
+    project_id = _create_project(client=client, caller="alice", name="alices project")
+
+    created = _create_table(
+        client=client,
+        caller="alice",
+        project_id=project_id,
+        datastore=warehouse,
+        columns=[{"name": "id", "type": "INTEGER", "nullable": True, "primary_key": True}],
+    )
+
+    assert created.status_code == httpx.codes.UNPROCESSABLE_ENTITY, created.text
+    assert "must hold a value" in created.text
+
+
+def test_a_table_is_created_with_the_key_its_columns_asked_for(
+    client: TestClient, warehouse: str
+) -> None:
+    """The key reaches the engine, which then holds the table to it."""
+    project_id = _create_project(client=client, caller="alice", name="alices project")
+
+    created = _create_table(
+        client=client,
+        caller="alice",
+        project_id=project_id,
+        datastore=warehouse,
+        columns=[
+            {"name": "id", "type": "INTEGER", "nullable": False, "primary_key": True},
+            {"name": "note", "type": "TEXT", "nullable": True},
+        ],
+    )
+    assert created.status_code == httpx.codes.CREATED, created.text
+
+    first = _query(
+        client=client,
+        caller="alice",
+        project_id=project_id,
+        table="records",
+        sql="INSERT INTO records VALUES (1, 'first')",
+    )
+    assert first.status_code == httpx.codes.OK, first.text
+
+    again = _query(
+        client=client,
+        caller="alice",
+        project_id=project_id,
+        table="records",
+        sql="INSERT INTO records VALUES (1, 'again')",
+    )
+    assert again.status_code == httpx.codes.BAD_REQUEST, again.text
+
+
 def test_a_column_the_engine_will_not_accept_is_answered_with_a_400(
     client: TestClient, warehouse: str
 ) -> None:

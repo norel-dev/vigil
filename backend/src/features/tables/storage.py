@@ -28,6 +28,7 @@ __all__ = [
     "ColumnDefinition",
     "QueryPrivilege",
     "TableStorage",
+    "primary_key_of",
     "validate_identifier",
 ]
 
@@ -100,6 +101,14 @@ class ColumnDefinition(BaseModel):
     nullable: bool = Field(
         default=True, description="Whether the column may hold no value."
     )
+    primary_key: bool = Field(
+        default=False,
+        description=(
+            "Whether this column is part of the table's primary key. Every "
+            "column marked so forms one key together, in the order the "
+            "columns were given, and none of them may be nullable."
+        ),
+    )
 
     @field_validator("name")
     @classmethod
@@ -141,6 +150,47 @@ class ColumnDefinition(BaseModel):
         return candidate
 
 
+def primary_key_of(columns: Sequence[ColumnDefinition]) -> tuple[str, ...]:
+    """Return the columns forming the table's primary key, in order.
+
+    A key is a fact about a table, but it is asked for one column at a time,
+    so this is where the columns are read back as the single key they
+    describe. It lives beside the protocol rather than inside any one
+    implementation because the rule below is the platform's, not an engine's,
+    and a store that forgot it would create a table that quietly is not the
+    one that was asked for.
+
+    That rule is that a key column may not be nullable. It is stated here
+    rather than left to the engine because engines disagree about it: SQLite
+    allows NULLs in a primary key column unless the column is declared NOT
+    NULL, which is a documented legacy behaviour rather than something a
+    caller should have to know. Refusing the contradiction is what lets every
+    implementation emit the NOT NULL that closes it.
+
+    Args:
+        columns: The columns of the table being created, in order.
+
+    Returns:
+        tuple[str, ...]: Names of the key columns, in the order the columns
+            were given. Empty if the table was asked for without a key.
+
+    Raises:
+        ValueError: If a column in the key may hold no value.
+    """
+    key = [column for column in columns if column.primary_key]
+
+    nullable = [column.name for column in key if column.nullable]
+    if nullable:
+        raise ValueError(
+            "A primary key column must hold a value, but "
+            f"{', '.join(repr(name) for name in nullable)} "
+            f"{'was' if len(nullable) == 1 else 'were'} asked for as both "
+            "part of the key and nullable."
+        )
+
+    return tuple(column.name for column in key)
+
+
 @runtime_checkable
 class TableStorage(Protocol):
     """Storage that holds structured tables, kept apart by namespace.
@@ -167,6 +217,12 @@ class TableStorage(Protocol):
         This runs at the privilege that may create and drop, which is why it
         is a method here rather than a statement a caller could send.
 
+        Which of the columns form the primary key is read out of them with
+        `primary_key_of`, and an implementation is expected to ask rather than
+        to work it out itself: the answer carries the platform's rule about
+        what a key may be made of, and a table created without it would not be
+        the table that was asked for.
+
         Args:
             namespace: The part of the datastore the table belongs in.
             name: Name of the table to create.
@@ -174,6 +230,7 @@ class TableStorage(Protocol):
 
         Raises:
             TableProvisioningError: If the table could not be created.
+            ValueError: If the columns do not describe a usable primary key.
         """
         ...
 

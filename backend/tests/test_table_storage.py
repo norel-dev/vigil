@@ -19,13 +19,19 @@ These tests need no policy engine, so they run whether or not `opa` is
 installed.
 """
 
+import sqlite3
 from pathlib import Path
 
 import pytest
 
 from src.features.datastores.model import SQLiteDataStore
 from src.features.datastores.storage import DataStoreQuery
-from src.features.tables.storage import ColumnDefinition, QueryPrivilege, TableStorage
+from src.features.tables.storage import (
+    ColumnDefinition,
+    QueryPrivilege,
+    TableStorage,
+    primary_key_of,
+)
 from src.platform.exceptions import QueryFailedError, QueryRefusedError, TableProvisioningError
 
 #: Two projects' corners of the same datastore.
@@ -157,6 +163,197 @@ async def test_a_namespace_that_is_not_a_plain_name_is_refused(
             name=TABLE,
             columns=[ColumnDefinition(name="id", type="INTEGER")],
         )
+
+
+# --- the primary key ----------------------------------------------------------
+#
+# A key is asked for one column at a time and read back as a whole, so what is
+# pinned down here is both halves: that the columns are gathered in the order
+# they were given, and that the engine really does hold the table to the key
+# afterwards. The second half is checked by inserting rather than by reading
+# the DDL back, because a key that is written down but not enforced is exactly
+# the failure this feature exists to avoid.
+
+
+def test_a_table_asked_for_without_a_key_has_none() -> None:
+    """Not naming a key is the ordinary case, and stays a table."""
+    assert (
+        primary_key_of(
+            columns=[
+                ColumnDefinition(name="id", type="INTEGER"),
+                ColumnDefinition(name="note", type="TEXT"),
+            ]
+        )
+        == ()
+    )
+
+
+def test_the_key_is_the_marked_columns_in_the_order_they_were_given() -> None:
+    """Order is the columns' own, because that is the only order stated."""
+    assert primary_key_of(
+        columns=[
+            ColumnDefinition(name="tenant", type="TEXT", nullable=False, primary_key=True),
+            ColumnDefinition(name="note", type="TEXT"),
+            ColumnDefinition(name="seq", type="INTEGER", nullable=False, primary_key=True),
+        ]
+    ) == ("tenant", "seq")
+
+
+def test_a_key_column_that_may_hold_no_value_is_refused() -> None:
+    """The caller asked for two things that cannot both be true.
+
+    SQLite would take this and quietly allow NULLs in the key, so the
+    contradiction is refused here rather than left to the engine.
+    """
+    with pytest.raises(ValueError, match="must hold a value"):
+        primary_key_of(
+            columns=[ColumnDefinition(name="id", type="INTEGER", primary_key=True)]
+        )
+
+
+async def test_a_single_column_key_refuses_a_second_row_with_the_same_value(
+    store: SQLiteDataStore,
+) -> None:
+    """The point of the key: the engine, not the platform, keeps rows apart."""
+    await store.create_table(
+        namespace=OURS,
+        name=TABLE,
+        columns=[
+            ColumnDefinition(name="id", type="INTEGER", nullable=False, primary_key=True),
+            ColumnDefinition(name="note", type="TEXT"),
+        ],
+    )
+
+    await _run(store=store, sql=f"INSERT INTO {TABLE} VALUES (1, 'first')")
+
+    with pytest.raises(QueryFailedError):
+        await _run(store=store, sql=f"INSERT INTO {TABLE} VALUES (1, 'again')")
+
+
+async def test_a_composite_key_refuses_only_a_repeated_combination(
+    store: SQLiteDataStore,
+) -> None:
+    """Several marked columns make one key, not one key each.
+
+    Either half may repeat on its own; it is the pair that may not.
+    """
+    await store.create_table(
+        namespace=OURS,
+        name=TABLE,
+        columns=[
+            ColumnDefinition(name="tenant", type="TEXT", nullable=False, primary_key=True),
+            ColumnDefinition(name="seq", type="INTEGER", nullable=False, primary_key=True),
+            ColumnDefinition(name="note", type="TEXT"),
+        ],
+    )
+
+    await _run(store=store, sql=f"INSERT INTO {TABLE} VALUES ('acme', 1, 'first')")
+    await _run(store=store, sql=f"INSERT INTO {TABLE} VALUES ('acme', 2, 'same tenant')")
+    await _run(store=store, sql=f"INSERT INTO {TABLE} VALUES ('other', 1, 'same seq')")
+
+    with pytest.raises(QueryFailedError):
+        await _run(store=store, sql=f"INSERT INTO {TABLE} VALUES ('acme', 1, 'again')")
+
+    assert await _run(store=store, sql=f"SELECT COUNT(*) FROM {TABLE}") == [(3,)]
+
+
+async def test_a_key_column_holds_the_engine_to_a_value(store: SQLiteDataStore) -> None:
+    """The NOT NULL that the refusal above makes it safe to emit.
+
+    SQLite allows NULLs in a primary key column unless the column is declared
+    NOT NULL. Because a nullable key column is refused, every key column is
+    declared so, and the engine keeps the key whole.
+    """
+    await store.create_table(
+        namespace=OURS,
+        name=TABLE,
+        columns=[
+            ColumnDefinition(name="tenant", type="TEXT", nullable=False, primary_key=True),
+            ColumnDefinition(name="note", type="TEXT"),
+        ],
+    )
+
+    with pytest.raises(QueryFailedError):
+        await _run(store=store, sql=f"INSERT INTO {TABLE} VALUES (NULL, 'no tenant')")
+
+
+def _key_sqlite_holds(*, directory: Path, namespace: str, table: str) -> list[str]:
+    """Return the key columns SQLite believes `table` has, in its own order.
+
+    The file is opened directly rather than through the datastore, because a
+    caller's connection is confined to their table and may not ask SQLite
+    about itself. This is the test looking behind the platform to check that
+    what was asked for is what was built.
+
+    Args:
+        directory: The directory the datastore was pointed at.
+        namespace: The namespace whose database holds the table.
+        table: The table to describe.
+
+    Returns:
+        list[str]: The key columns, ordered by their position in the key.
+
+    Raises:
+        AssertionError: If there was no database file to read.
+    """
+    files = [path for path in directory.glob("*.db") if namespace in path.name]
+    assert files, f"no database file for '{namespace}' to read"
+
+    with sqlite3.connect(files[0]) as connection:
+        described = connection.execute(f"PRAGMA table_info({table})").fetchall()
+
+    # `pk` is the column's one-based place in the key, and zero for a column
+    # outside it.
+    in_key = sorted((row for row in described if row[5] > 0), key=lambda row: row[5])
+    return [row[1] for row in in_key]
+
+
+async def test_the_engine_is_given_the_key_the_columns_described(
+    store: SQLiteDataStore, tmp_path: Path
+) -> None:
+    """SQLite's own account of the table, so the key is really in the DDL."""
+    await store.create_table(
+        namespace=OURS,
+        name=TABLE,
+        columns=[
+            ColumnDefinition(name="tenant", type="TEXT", nullable=False, primary_key=True),
+            ColumnDefinition(name="seq", type="INTEGER", nullable=False, primary_key=True),
+            ColumnDefinition(name="note", type="TEXT"),
+        ],
+    )
+
+    assert _key_sqlite_holds(directory=tmp_path, namespace=OURS, table=TABLE) == [
+        "tenant",
+        "seq",
+    ]
+
+
+async def test_a_lone_integer_key_column_still_aliases_the_rowid(
+    store: SQLiteDataStore, tmp_path: Path
+) -> None:
+    """The reason one constraint form is enough for both shapes of key.
+
+    Writing the key as a table constraint rather than against the column keeps
+    a single INTEGER key column an alias for the rowid, which is what makes
+    it fill itself in when a row is inserted without it.
+    """
+    await store.create_table(
+        namespace=OURS,
+        name=TABLE,
+        columns=[
+            ColumnDefinition(name="id", type="INTEGER", nullable=False, primary_key=True),
+            ColumnDefinition(name="note", type="TEXT"),
+        ],
+    )
+
+    await _run(store=store, sql=f"INSERT INTO {TABLE} (note) VALUES ('first')")
+    await _run(store=store, sql=f"INSERT INTO {TABLE} (note) VALUES ('second')")
+
+    assert await _run(
+        store=store,
+        sql=f"SELECT id, note FROM {TABLE} ORDER BY id",
+        privilege=QueryPrivilege.READ_ONLY,
+    ) == [(1, "first"), (2, "second")]
 
 
 # --- the privilege levels -----------------------------------------------------

@@ -13,10 +13,11 @@ validate it - because a caller who can get a statement past a reader would
 have got past the only thing protecting the table.
 """
 
+from typing import Self
 from uuid import UUID
 
 from fastapi import APIRouter, Response, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.authz.policy import Action, Resource, ResourceType
 from src.features.datastores.storage import DataStoreQueryResponse
@@ -26,6 +27,7 @@ from src.features.tables.model import Table
 from src.features.tables.storage import (
     ColumnDefinition,
     QueryPrivilege,
+    primary_key_of,
     validate_identifier,
 )
 from src.identity.caller import CurrentSubject
@@ -77,6 +79,25 @@ class CreateTableRequest(BaseModel):
             ValueError: If the name is not a usable identifier.
         """
         return validate_identifier(name=value, kind="table name")
+
+    @model_validator(mode="after")
+    def _check_primary_key(self) -> Self:
+        """Reject columns that do not describe a usable primary key.
+
+        The key is asked for one column at a time, so whether the columns add
+        up to a key is only answerable once they are all here. Asking now
+        means a caller who contradicted themselves is told so plainly, rather
+        than hearing it from the engine as a failed provisioning, or - worse -
+        not hearing it at all.
+
+        Returns:
+            Self: The request, unchanged.
+
+        Raises:
+            ValueError: If a column in the key may hold no value.
+        """
+        primary_key_of(columns=self.columns)
+        return self
 
 
 class TableQueryRequest(BaseModel):

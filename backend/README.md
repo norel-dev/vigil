@@ -137,7 +137,7 @@ POST /projects/{project_id}/tables/
   "name": "customers",
   "datastore": "warehouse",
   "columns": [
-    {"name": "id",   "type": "INTEGER",      "nullable": false},
+    {"name": "id",   "type": "INTEGER",      "nullable": false, "primary_key": true},
     {"name": "email", "type": "VARCHAR(255)"}
   ]
 }
@@ -155,6 +155,19 @@ engine as given — the platform does not try to understand them. It only checks
 that the text cannot stop being a type, and that column and table names are
 plain identifiers, because all three are placed into a `CREATE TABLE` that runs
 at the platform's own privilege.
+
+The primary key is asked for one column at a time. Every column marked
+`primary_key` forms one key together, in the order the columns were given, so a
+single mark makes a single-column key and several make a composite one. A key is
+the one part of a table's shape that cannot be added afterwards, which is why it
+is offered here rather than left to an `ALTER`.
+
+A key column may not be `nullable`, and a request that asks for both is refused
+with a 422 naming the column. That rule is the platform's own rather than the
+engine's: SQLite permits NULLs in a primary key column unless the column is
+declared `NOT NULL`, which is documented legacy behaviour and not something a
+caller should have to know. Refusing the contradiction is what lets the platform
+emit the `NOT NULL` that closes it.
 
 ### How the limits are enforced
 
