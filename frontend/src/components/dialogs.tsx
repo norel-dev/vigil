@@ -5,9 +5,11 @@ import {
   uploadTo,
   type CatalogueEntry,
   type ColumnDefinition,
+  type Membership,
   type ProjectRole,
   type Uuid,
 } from "../lib/api";
+import type { Rights } from "../lib/authz";
 import { Dialog } from "./Overlay";
 import { Field, Problem, Sketch } from "./bits";
 import { addColumnStatement, createTableSketch, insertStatement, isIdentifier } from "../lib/sql";
@@ -100,14 +102,31 @@ export function NewWorkspaceDialog(props: {
   );
 }
 
+/** The ladder, lowest rung first, in the order the policy builds it. */
+const ROLES: ProjectRole[] = ["viewer", "editor", "admin", "owner"];
+
 export function GrantDialog(props: {
   project: Uuid;
+  /** What the reader may do here, so the form offers only what will be allowed. */
+  rights: Rights;
+  /** Who is already in the workspace, which is half of what the policy judges. */
+  members: Membership[];
   onDismiss: () => void;
   onGranted: () => void;
 }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<ProjectRole>("editor");
   const { busy, problem, submit } = useSubmit();
+
+  // The role somebody holds now is as much a part of the question as the one
+  // being asked for: the policy will not let an owner be lowered, and will not
+  // let anybody but an owner create one. Matching the typed address against the
+  // membership list is what lets the form say so before it is submitted.
+  const typed = email.trim().toLowerCase();
+  const current =
+    props.members.find((member) => member.email.toLowerCase() === typed)?.role ?? null;
+  const refusal = props.rights.refusal(role, current);
+  const offerable = ROLES.filter((option) => props.rights.mayGrant(option, current));
 
   return (
     <Dialog eyebrow="membership" title="Grant access" onDismiss={props.onDismiss} width={520}>
@@ -124,7 +143,11 @@ export function GrantDialog(props: {
         <Field
           label="email"
           htmlFor="dp-grant-email"
-          gloss="They must already be a user of the platform. Granting a role does not create one."
+          gloss={
+            current
+              ? `They are already in this workspace, as ${current}. Granting again moves them.`
+              : "They must already be a user of the platform. Granting a role does not create one."
+          }
         >
           <input
             id="dp-grant-email"
@@ -139,7 +162,7 @@ export function GrantDialog(props: {
         <Field
           label="role"
           htmlFor="dp-grant-role"
-          gloss="Roles are ordered, and each includes everything below it. A viewer reads; an editor writes rows and uploads; an admin manages members; an owner may also create tables."
+          gloss="Roles are ordered, and each includes everything below it. A viewer reads; an editor writes rows and uploads; an admin manages members; an owner creates and deletes objects, and decides who is in the workspace at all. Only an owner may hand out the owner role, and it cannot be taken back."
         >
           <select
             id="dp-grant-role"
@@ -147,19 +170,29 @@ export function GrantDialog(props: {
             value={role}
             onChange={(event) => setRole(event.target.value as ProjectRole)}
           >
-            <option value="viewer">viewer</option>
-            <option value="editor">editor</option>
-            <option value="admin">admin</option>
-            <option value="owner">owner</option>
+            {ROLES.map((option) => (
+              <option
+                key={option}
+                value={option}
+                disabled={!offerable.includes(option) && option !== role}
+              >
+                {option}
+              </option>
+            ))}
           </select>
         </Field>
+        {refusal && <Problem>{refusal}</Problem>}
         {problem && <Problem>{problem}</Problem>}
         <div className="dp-form-actions">
           <span className="vg-spacer" />
           <button type="button" className="vg-btn is-ghost" onClick={props.onDismiss}>
             cancel
           </button>
-          <button type="submit" className="vg-btn is-primary" disabled={busy || !email.trim()}>
+          <button
+            type="submit"
+            className="vg-btn is-primary"
+            disabled={busy || !email.trim() || refusal !== null}
+          >
             {busy ? "granting…" : "grant access"}
           </button>
         </div>

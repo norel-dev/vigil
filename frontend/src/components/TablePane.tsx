@@ -4,6 +4,7 @@ import { Empty, Head, Problem } from "./bits";
 import { AddColumnDialog, InsertRowDialog } from "./dialogs";
 import { ROW_LIMIT, latency as fmtLatency, stamp } from "../lib/format";
 import { isRead, selectStatement, verbOf } from "../lib/sql";
+import type { Rights } from "../lib/authz";
 
 export interface TableActions {
   addColumn: () => void;
@@ -22,7 +23,8 @@ export interface TableActions {
 export function TablePane(props: {
   project: Uuid;
   table: Table;
-  canWrite: boolean;
+  /** The policy as the console reads it, asked per act rather than once. */
+  rights: Rights;
   registerActions: (actions: TableActions | null) => void;
   onRan: (verb: string, seconds: number, rows: number | null) => void;
   onDeleted: () => void;
@@ -108,7 +110,7 @@ export function TablePane(props: {
           <div className="vg-head-meta">
             <span>{props.table.datastore_name}</span>
             <span>·</span>
-            <span>{props.canWrite ? "read + write" : "read only"}</span>
+            <span>{props.rights.can("table.write") ? "read + write" : "read only"}</span>
             <span>·</span>
             <span>created {stamp(props.table.creation_date)}</span>
           </div>
@@ -116,16 +118,20 @@ export function TablePane(props: {
             <button
               className="vg-btn is-primary"
               onClick={() => setOverlay("row")}
-              disabled={!props.canWrite || columns.length === 0}
+              disabled={!props.rights.can("table.write") || columns.length === 0}
             >
               insert row
             </button>
-            <button className="vg-btn" onClick={() => setOverlay("column")} disabled={!props.canWrite}>
+            <button
+              className="vg-btn"
+              onClick={() => setOverlay("column")}
+              disabled={!props.rights.can("table.write")}
+            >
               add column
             </button>
             <button
               className="vg-btn is-danger"
-              disabled={!props.canWrite}
+              disabled={!props.rights.can("table.delete")}
               onClick={() =>
                 props.onAskDelete({
                   title: `Delete ${props.table.name}`,
@@ -155,7 +161,7 @@ export function TablePane(props: {
             <span className="dp-well-verb">{verbOf(statement)}</span>
             <span className="dp-well-subject">· {props.table.name}</span>
             <span className="vg-spacer" />
-            <span>{props.canWrite ? "read + write" : "read only"}</span>
+            <span>{props.rights.can("table.write") ? "read + write" : "read only"}</span>
           </div>
           <div className="dp-well-body">
             <span className="dp-well-prompt" aria-hidden="true">

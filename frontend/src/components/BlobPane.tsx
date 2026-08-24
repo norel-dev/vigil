@@ -4,6 +4,7 @@ import { downloadUrl, forget } from "../lib/media";
 import { Head, KV, Loading, Problem } from "./bits";
 import { bytes, stamp } from "../lib/format";
 import { resolve } from "../viewers/registry";
+import type { Rights } from "../lib/authz";
 
 /**
  * One blob, looked at.
@@ -16,7 +17,8 @@ import { resolve } from "../viewers/registry";
 export function BlobPane(props: {
   project: Uuid;
   view: BlobView;
-  canWrite: boolean;
+  /** The policy as the console reads it, asked per act rather than once. */
+  rights: Rights;
   onDeleted: () => void;
   onReplaced: () => void;
   onAskDelete: (confirm: { title: string; body: string; verb: string; run: () => Promise<void> }) => void;
@@ -93,12 +95,15 @@ export function BlobPane(props: {
                 open bytes
               </a>
             )}
-            <label className="vg-btn" style={{ cursor: props.canWrite ? "pointer" : "not-allowed" }}>
+            <label
+              className="vg-btn"
+              style={{ cursor: props.rights.can("blob.upload") ? "pointer" : "not-allowed" }}
+            >
               {replacing ? "uploading…" : stored ? "replace" : "upload bytes"}
               <input
                 type="file"
                 hidden
-                disabled={!props.canWrite || replacing}
+                disabled={!props.rights.can("blob.upload") || replacing}
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   if (file) void replace(file);
@@ -108,7 +113,7 @@ export function BlobPane(props: {
             </label>
             <button
               className="vg-btn is-danger"
-              disabled={!props.canWrite}
+              disabled={!props.rights.can("blob.delete")}
               onClick={() =>
                 props.onAskDelete({
                   title: "Delete this blob",

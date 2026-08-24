@@ -144,7 +144,18 @@ async function call<T>(
   if (response.status === 204) return undefined as T;
 
   const text = await response.text();
-  const parsed = text ? (JSON.parse(text) as unknown) : null;
+  let parsed: unknown = null;
+  try {
+    if (text) parsed = JSON.parse(text) as unknown;
+  } catch {
+    // The platform only ever answers json, so anything else is something else
+    // answering in its place — most often the dev server handing back
+    // index.html because the `/api` proxy is not in front of it.
+    throw new ApiError(
+      response.status,
+      "that answer was not json — the /api proxy is not in front of the platform. restart the dev server so it picks up vite.config.ts.",
+    );
+  }
 
   if (!response.ok) throw new ApiError(response.status, readDetail(response.status, parsed));
   return parsed as T;
@@ -165,6 +176,15 @@ export const api = {
     call<Membership[]>("GET", `/projects/${project}/members`),
   grantMembership: (project: Uuid, email: string, role: ProjectRole) =>
     call<Membership>("PUT", `/projects/${project}/members`, { email, role }),
+  /**
+   * Take somebody out of a workspace, ending their access to everything in it.
+   *
+   * This is the owner's to decide rather than every member manager's, and an
+   * owner cannot be the one taken out — the platform refuses that, so the
+   * console does not offer it.
+   */
+  removeMembership: (project: Uuid, user: Uuid) =>
+    call<void>("DELETE", `/projects/${project}/members/${user}`),
 
   catalogue: () => call<CatalogueEntry[]>("GET", "/datastores/catalogue"),
 

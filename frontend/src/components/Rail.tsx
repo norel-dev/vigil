@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import type { BlobView, Table } from "../lib/api";
 import type { Node } from "../lib/tree";
 import { runs } from "../lib/tree";
+import type { Rights } from "../lib/authz";
 
 /**
  * One navigable row in the rail, whatever kind of thing it stands for.
@@ -67,7 +68,8 @@ export function Rail(props: {
   rows: RailRow[];
   cursor: number;
   openId: string;
-  canWrite: boolean;
+  /** The policy as the console reads it, asked per act rather than once. */
+  rights: Rights;
   tableCount: number;
   blobTotal: number;
   blobShown: number;
@@ -173,7 +175,11 @@ export function Rail(props: {
           )}
         </div>
         <div className="dp-rail-actions">
-          <button className="vg-btn is-ghost" onClick={props.onNewTable} disabled={!props.canWrite}>
+          <button
+            className="vg-btn is-ghost"
+            onClick={props.onNewTable}
+            disabled={!props.rights.can("table.create")}
+          >
             + table
           </button>
         </div>
@@ -231,7 +237,11 @@ export function Rail(props: {
         </div>
 
         <div className="dp-rail-actions">
-          <button className="vg-btn is-ghost" onClick={props.onNewBlob} disabled={!props.canWrite}>
+          <button
+            className="vg-btn is-ghost"
+            onClick={props.onNewBlob}
+            disabled={!props.rights.can("blob.create")}
+          >
             + upload
           </button>
         </div>

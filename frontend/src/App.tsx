@@ -8,10 +8,10 @@ import {
   type CurrentUser,
   type Membership,
   type Project,
-  type ProjectRole,
   type Table,
   type Uuid,
 } from "./lib/api";
+import { rightsIn } from "./lib/authz";
 import { Gate } from "./components/Gate";
 import { Canvas, Cmdline, Statusline, Tabline, type Mode, type Tab } from "./components/Shell";
 import { Palette, type PaletteItem } from "./components/Palette";
@@ -246,15 +246,13 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buffers, loadWorkspace]);
 
-  const role: ProjectRole | "platform admin" | null = !me
-    ? null
-    : me.is_platform_admin
-      ? "platform admin"
-      : workspaceId
-        ? (me.project_roles[workspaceId] ?? null)
-        : null;
-  const canWrite =
-    role === "platform admin" || role === "editor" || role === "admin" || role === "owner";
+  // What the reader may do here is asked act by act rather than once, because
+  // the ladder does not break in a single place: an editor changes rows inside
+  // objects that already exist, an admin shapes what members may do, and only
+  // an owner brings objects into being, destroys them, or decides who is in
+  // the workspace at all.
+  const rights = useMemo(() => rightsIn(me, workspaceId), [me, workspaceId]);
+  const role = rights.role;
 
   /* -- Buffers: navigating, opening, closing -------------------------------- */
 
@@ -489,7 +487,7 @@ export function App() {
         label: ":new table",
         hint: "create a table in this workspace",
         run: () =>
-          canWrite
+          rights.can("table.create")
             ? setOverlay({ kind: "new-table" })
             : say("creating a table is the workspace owner's to do", true),
       },
@@ -499,7 +497,9 @@ export function App() {
         label: ":upload",
         hint: "record a blob and send its bytes",
         run: () =>
-          canWrite ? setOverlay({ kind: "upload" }) : say("uploading takes an editor's rights", true),
+          rights.can("blob.create")
+            ? setOverlay({ kind: "upload" })
+            : say("recording a blob is the workspace owner's to do", true),
       },
       {
         id: "add-column",
@@ -507,9 +507,11 @@ export function App() {
         label: ":add column",
         hint: "alter the table in this buffer",
         run: () =>
-          tableActions.current
-            ? tableActions.current.addColumn()
-            : say("open a table first — this alters the one you are looking at", true),
+          !rights.can("table.write")
+            ? say("altering a table takes an editor's rights", true)
+            : tableActions.current
+              ? tableActions.current.addColumn()
+              : say("open a table first — this alters the one you are looking at", true),
       },
       {
         id: "insert-row",
@@ -517,9 +519,11 @@ export function App() {
         label: ":insert row",
         hint: "put a row in the table in this buffer",
         run: () =>
-          tableActions.current
-            ? tableActions.current.insertRow()
-            : say("open a table first — this writes to the one you are looking at", true),
+          !rights.can("table.write")
+            ? say("writing rows takes an editor's rights", true)
+            : tableActions.current
+              ? tableActions.current.insertRow()
+              : say("open a table first — this writes to the one you are looking at", true),
       },
       {
         id: "find",
@@ -551,7 +555,10 @@ export function App() {
         kind: "cmd",
         label: ":grant access",
         hint: "give somebody a role in this workspace",
-        run: () => setOverlay({ kind: "grant" }),
+        run: () =>
+          rights.can("project.manage_members")
+            ? setOverlay({ kind: "grant" })
+            : say("managing members takes an admin's rights", true),
       },
       {
         id: "reload",
@@ -622,7 +629,7 @@ export function App() {
     here.tables,
     here.blobViews,
     workspaceId,
-    canWrite,
+    rights,
     buffers.length,
     activeBufferId,
     say,
@@ -814,7 +821,7 @@ export function App() {
               rows={rail}
               cursor={railCursor}
               openId={openId}
-              canWrite={canWrite}
+              rights={rights}
               tableCount={here.tables?.length ?? 0}
               blobTotal={blobTotal}
               blobShown={blobShown}
@@ -835,12 +842,25 @@ export function App() {
                   tables={here.tables ?? []}
                   blobViews={here.blobViews}
                   members={here.members}
-                  canWrite={canWrite}
+                  rights={rights}
                   onOpenTable={(name) => goTo(project.id, { kind: "table", name })}
                   onOpenBlob={(key) => goTo(project.id, { kind: "blob", key })}
                   onNewTable={() => setOverlay({ kind: "new-table" })}
                   onNewBlob={() => setOverlay({ kind: "upload" })}
                   onGrant={() => setOverlay({ kind: "grant" })}
+                  onRemove={(member) =>
+                    setOverlay({
+                      kind: "confirm",
+                      title: `Remove ${member.email}`,
+                      body: `Taking them out of ${project.name} ends their access to every table and blob in it at once. Nothing here is deleted, and they can be granted a role again — but until they are, this workspace is closed to them.`,
+                      verb: "remove from workspace",
+                      run: async () => {
+                        await api.removeMembership(project.id, member.user_id);
+                        await loadWorkspace(project.id);
+                        say(`${member.email} is out of this workspace`);
+                      },
+                    })
+                  }
                 />
               )}
 
@@ -854,7 +874,7 @@ export function App() {
                       key={`${project.id}/${table.name}`}
                       project={project.id}
                       table={table}
-                      canWrite={canWrite}
+                      rights={rights}
                       registerActions={(actions) => {
                         tableActions.current = actions;
                       }}
@@ -881,7 +901,7 @@ export function App() {
                     key={`${project.id}/${openBlob.blob.key}`}
                     project={project.id}
                     view={openBlob}
-                    canWrite={canWrite}
+                    rights={rights}
                     onDeleted={() => {
                       forgetSelection(project.id, { kind: "blob", key: openBlob.blob.key });
                       void loadWorkspace(project.id);
@@ -964,6 +984,8 @@ export function App() {
       {overlay?.kind === "grant" && project && (
         <GrantDialog
           project={project.id}
+          rights={rights}
+          members={here.members ?? []}
           onDismiss={() => setOverlay(null)}
           onGranted={async () => {
             setOverlay(null);
