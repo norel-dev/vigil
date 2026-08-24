@@ -17,6 +17,7 @@ import { Canvas, Cmdline, Statusline, Tabline, type Mode, type Tab } from "./com
 import { Palette, type PaletteItem } from "./components/Palette";
 import { Rail, railRows, type RailRow } from "./components/Rail";
 import { WorkspacePane } from "./components/WorkspacePane";
+import { MembersPane } from "./components/MembersPane";
 import { TablePane, type TableActions } from "./components/TablePane";
 import { BlobPane } from "./components/BlobPane";
 import { Empty, Loading, Problem } from "./components/bits";
@@ -34,6 +35,7 @@ const KEY_STORE = "dataplatform.key";
 
 type Selection =
   | { kind: "workspace" }
+  | { kind: "members" }
   | { kind: "table"; name: string }
   | { kind: "blob"; key: string };
 
@@ -392,9 +394,11 @@ export function App() {
     ? ""
     : buffer.selection.kind === "workspace"
       ? "overview"
-      : buffer.selection.kind === "table"
-        ? `table:${buffer.selection.name}`
-        : `blob:${buffer.selection.key}`;
+      : buffer.selection.kind === "members"
+        ? "members"
+        : buffer.selection.kind === "table"
+          ? `table:${buffer.selection.name}`
+          : `blob:${buffer.selection.key}`;
 
   // Opening a blob reveals the branch it hangs from.
   useEffect(() => {
@@ -428,6 +432,7 @@ export function App() {
       if (!workspaceId) return;
       const show = newTab ? openInNewBuffer : goTo;
       if (row.kind === "overview") show(workspaceId, { kind: "workspace" });
+      else if (row.kind === "members") show(workspaceId, { kind: "members" });
       else if (row.kind === "table") show(workspaceId, { kind: "table", name: row.table.name });
       else if (row.kind === "leaf") show(workspaceId, { kind: "blob", key: row.key });
       else {
@@ -559,6 +564,16 @@ export function App() {
           rights.can("project.manage_members")
             ? setOverlay({ kind: "grant" })
             : say("managing members takes an admin's rights", true),
+      },
+      {
+        id: "members",
+        kind: "cmd",
+        label: ":members",
+        hint: "who may reach this workspace, and how far",
+        run: () =>
+          workspaceId
+            ? goTo(workspaceId, { kind: "members" })
+            : say("there is no workspace open to read the members of", true),
       },
       {
         id: "reload",
@@ -748,6 +763,15 @@ export function App() {
         loading,
       };
     }
+    if (item.selection.kind === "members") {
+      return {
+        id: item.id,
+        kind: "members",
+        label: "members",
+        title: `${of?.name ?? "workspace"} · members`,
+        loading,
+      };
+    }
     if (item.selection.kind === "table") {
       return {
         id: item.id,
@@ -771,9 +795,11 @@ export function App() {
     ? "nothing open"
     : buffer.selection.kind === "workspace"
       ? "overview"
-      : buffer.selection.kind === "table"
-        ? `table ${buffer.selection.name}`
-        : buffer.selection.key;
+      : buffer.selection.kind === "members"
+        ? "members"
+        : buffer.selection.kind === "table"
+          ? `table ${buffer.selection.name}`
+          : buffer.selection.key;
 
   const mode: Mode = cmdOpen ? "command" : here.loading ? "busy" : "normal";
 
@@ -847,6 +873,16 @@ export function App() {
                   onOpenBlob={(key) => goTo(project.id, { kind: "blob", key })}
                   onNewTable={() => setOverlay({ kind: "new-table" })}
                   onNewBlob={() => setOverlay({ kind: "upload" })}
+                  onOpenMembers={() => goTo(project.id, { kind: "members" })}
+                />
+              )}
+
+              {buffer.selection.kind === "members" && (
+                <MembersPane
+                  project={project}
+                  role={role ?? "no role"}
+                  members={here.members}
+                  rights={rights}
                   onGrant={() => setOverlay({ kind: "grant" })}
                   onRemove={(member) =>
                     setOverlay({

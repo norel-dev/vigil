@@ -8,11 +8,12 @@ import type { Rights } from "../lib/authz";
  * One navigable row in the rail, whatever kind of thing it stands for.
  *
  * The rail is one list, so `j` and `k` walk it as one list — across the
- * workspace row, the tables and every level of the blob tree without the
- * reader having to think about where one section ends.
+ * workspace's own pages, the tables and every level of the blob tree without
+ * the reader having to think about where one section ends.
  */
 export type RailRow =
   | { id: "overview"; kind: "overview" }
+  | { id: "members"; kind: "members" }
   | { id: string; kind: "table"; table: Table }
   | { id: string; kind: "branch"; path: string; name: string; depth: number; count: number }
   | { id: string; kind: "leaf"; key: string; name: string; depth: number; view: BlobView };
@@ -21,7 +22,10 @@ export function railRows(
   tables: Table[],
   visible: Node<BlobView>[],
 ): RailRow[] {
-  const rows: RailRow[] = [{ id: "overview", kind: "overview" }];
+  const rows: RailRow[] = [
+    { id: "overview", kind: "overview" },
+    { id: "members", kind: "members" },
+  ];
   for (const table of tables) rows.push({ id: `table:${table.name}`, kind: "table", table });
   for (const node of visible) {
     rows.push(
@@ -46,6 +50,15 @@ export function railRows(
   }
   return rows;
 }
+
+/**
+ * The workspace's own pages, as opposed to the things kept inside it.
+ *
+ * The group that draws them asks this rather than taking the rows off the
+ * front of the list, so adding a page is adding it to `railRows` and nothing
+ * else has to know how many there now are.
+ */
+const isPage = (row: RailRow) => row.kind === "overview" || row.kind === "members";
 
 /** Matched runs, so a reader can see which part of a name answered the query. */
 function Name({ path, name, query }: { path: string; name: string; query: string }) {
@@ -119,7 +132,7 @@ export function Rail(props: {
           }
         }}
         title={
-          item.kind === "overview" || item.kind === "table"
+          isPage(item) || item.kind === "table"
             ? "⌘-click or middle-click for a new tab"
             : undefined
         }
@@ -136,6 +149,7 @@ export function Rail(props: {
           <span className="vg-tree-twist" aria-hidden="true" />
         )}
         {item.kind === "overview" && <span className="vg-tree-name">overview</span>}
+        {item.kind === "members" && <span className="vg-tree-name">members</span>}
         {item.kind === "table" && <span className="vg-tree-name">{item.table.name}</span>}
         {item.kind === "branch" && <Name path={item.path} name={item.name} query={props.query} />}
         {item.kind === "leaf" && <Name path={item.key} name={item.name} query={props.query} />}
@@ -154,6 +168,7 @@ export function Rail(props: {
     );
   };
 
+  const pages = props.rows.filter(isPage);
   const tables = props.rows.filter((item) => item.kind === "table");
   const blobs = props.rows.filter((item) => item.kind === "branch" || item.kind === "leaf");
   const searching = props.query.trim() !== "";
@@ -162,7 +177,9 @@ export function Rail(props: {
     <nav className="vg-split-rail" aria-label="workspace contents" ref={ref}>
       <div className="dp-rail-group">
         <div className="vg-pick-title">workspace</div>
-        <div className="vg-tree">{props.rows.slice(0, 1).map(row)}</div>
+        <div className="vg-tree">
+          {pages.map((item) => row(item, props.rows.indexOf(item)))}
+        </div>
       </div>
 
       <div className="dp-rail-group">

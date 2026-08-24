@@ -26,12 +26,13 @@ export interface Tab {
   label: string;
   title: string;
   /** Shown as the buffer's kind sigil, in the way vim shows a filetype. */
-  kind: "workspace" | "table" | "blob";
+  kind: "workspace" | "members" | "table" | "blob";
   loading: boolean;
 }
 
 const SIGIL: Record<Tab["kind"], string> = {
   workspace: "◫",
+  members: "◌",
   table: "▦",
   blob: "◈",
 };

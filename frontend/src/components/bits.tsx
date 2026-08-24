@@ -100,12 +100,40 @@ export function KV({ k, children }: { k: string; children: ReactNode }) {
   );
 }
 
-export function Fact({ label, value, meta }: { label: string; value: ReactNode; meta?: string }) {
-  return (
-    <div className="vg-fact">
+/**
+ * One reading off the band under a title.
+ *
+ * A fact that stands for a place you can go says so by being pressable. It is
+ * the same tile either way — the band keeps one rhythm whether or not a given
+ * reading leads anywhere.
+ */
+export function Fact({
+  label,
+  value,
+  meta,
+  onOpen,
+  title,
+}: {
+  label: string;
+  value: ReactNode;
+  meta?: string;
+  /** Where this reading leads, if it leads anywhere. */
+  onOpen?: () => void;
+  title?: string;
+}) {
+  const body = (
+    <>
       <div className="vg-fact-label">{label}</div>
       <div className="vg-fact-value">{value}</div>
       {meta && <div className="vg-fact-meta">{meta}</div>}
-    </div>
+    </>
+  );
+
+  if (!onOpen) return <div className="vg-fact">{body}</div>;
+
+  return (
+    <button type="button" className="vg-fact dp-fact-link" onClick={onOpen} title={title}>
+      {body}
+    </button>
   );
 }

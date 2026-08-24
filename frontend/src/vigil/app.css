@@ -629,3 +629,26 @@ body { margin: 0; overflow: hidden; }
   margin-top: var(--vg-s-2);
   border-top: 1px solid var(--vg-border);
 }
+
+/* -- A fact that leads somewhere -------------------------------------------- */
+/* Most readings in a band are readings and nothing more. One that stands for a
+   place the reader can go says so by being pressable — the tile is otherwise
+   unchanged, so the band keeps one rhythm whether or not a given reading
+   leads anywhere. */
+
+.dp-fact-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-right: 1px solid var(--vg-border);
+  cursor: pointer;
+}
+.dp-fact-link:hover .vg-fact-value { color: var(--vg-interactive); }
+.dp-fact-link:focus-visible {
+  outline: none;
+  box-shadow: var(--vg-shadow-focus);
+}

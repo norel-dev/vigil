@@ -5,7 +5,8 @@ A frontend for the DataPlatform API. It does three things:
 1. **Blobs** — upload files, and look at them: pictures, video, audio, pdfs,
    and source.
 2. **Tables** — create a table, add columns to it, put rows in it.
-3. **Workspaces** — switch between projects, and create new ones.
+3. **Workspaces** — switch between projects, create new ones, and say who
+   may reach them.
 
 Built on the Vigil design system in `design/`, which is vendored unmodified
 into `src/vigil/tokens.css` and `src/vigil/components.css`. `src/vigil/app.css`
@@ -103,14 +104,15 @@ registry, so they cannot disagree about what exists.
 | `⌘↵` | run the statement in the well |
 | `esc` | dismiss |
 
-`:new tab` duplicates the buffer you are in and `:close` closes it. `:density`
+`:new tab` duplicates the buffer you are in and `:close` closes it. `:members`
+opens the members page and `:grant access` gives somebody a role. `:density`
 switches comfortable and compact. `:gloss` hides the line under every section
 title. `:forget key` signs out.
 
 ## Buffers and workspaces
 
-A tab is one open object — a table, a blob, or a workspace's overview — the way
-a buffer in an editor is one open file. It is also a place you put yourself, the
+A tab is one open object — a table, a blob, or one of a workspace's own pages
+— the way a buffer in an editor is one open file. It is also a place you put yourself, the
 way a browser tab is, and the console treats it as yours:
 
 * **Clicking a table or a blob shows it in the tab you are in.** It never mints
@@ -135,6 +137,22 @@ the workspace is not itself a tab: it lives in the statusline, left of the
 context, and clicking it switches the buffer in front of you. Workspace data is
 cached per workspace, so tabs across several of them do not re-read each
 other's.
+
+## The workspace's pages
+
+A workspace has two pages of its own, and the rail lists them above its
+contents. **Overview** is what the workspace holds — its tables and its blobs.
+**Members** is who may reach it, and how far.
+
+They are two pages rather than two halves of one because they change for
+different reasons and at different people's hands: the inventory moves as work
+is done, and the membership moves when access is granted or taken back. The
+overview still counts the members in its band, and that count is the way to
+the page.
+
+Each is a buffer like any other, so a members page can sit in its own tab
+beside a table — which is the point when you are checking a grant against what
+somebody would be able to reach.
 
 ## Viewers
 
@@ -224,8 +242,8 @@ src/
   viewers/viewer.ts       what it takes to show a blob — the abstraction
   viewers/registry.ts     which viewer draws which bytes — the only list
   components/Shell.tsx    tabline · canvas · command line · statusline
-  components/Rail.tsx     the workspace's contents, and the j/k cursor
-  components/*Pane.tsx    workspace · table · blob
+  components/Rail.tsx     the workspace's pages and contents, and the j/k cursor
+  components/*Pane.tsx    workspace · members · table · blob
   components/dialogs.tsx  every form
   vigil/                  the design system, vendored, plus the console's layer
 ```
