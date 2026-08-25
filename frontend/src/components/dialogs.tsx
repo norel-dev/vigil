@@ -236,9 +236,11 @@ export function NewTableDialog(props: {
    * Put a column into the key, or take it out.
    *
    * The platform refuses a key column that may hold no value, so joining the
-   * key is what settles the question: the mark brings NOT NULL with it and
-   * the nullable toggle goes quiet for as long as the column is in the key.
-   * The contradiction is never composable, so it never has to be explained.
+   * key is what settles the question rather than leaving it open: the mark
+   * brings NOT NULL with it, and for as long as the column is in the key that
+   * is shown as a fact rather than offered as a toggle, because it is a
+   * consequence and would not answer a click. The contradiction is never
+   * composable, so it never has to be explained.
    */
   const mark = (id: string, inKey: boolean) =>
     update(id, inKey ? { primary_key: true, nullable: false } : { primary_key: false });
@@ -346,22 +348,21 @@ export function NewTableDialog(props: {
                   placeholder="TYPE"
                   onChange={(event) => update(column.id, { type: event.target.value })}
                 />
-                <button
-                  type="button"
-                  className={`vg-btn is-ghost${column.nullable ? "" : " is-on"}`}
-                  aria-pressed={!column.nullable}
-                  disabled={column.primary_key}
-                  title={
-                    column.primary_key
-                      ? "a key column must hold a value"
-                      : column.nullable
-                        ? "may hold no value"
-                        : "must hold a value"
-                  }
-                  onClick={() => update(column.id, { nullable: !column.nullable })}
-                >
-                  {column.nullable ? "nullable" : "not null"}
-                </button>
+                {column.primary_key ? (
+                  <span className="vg-tag dp-col-fact" title="a key column must hold a value">
+                    not null
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className={`vg-btn is-ghost${column.nullable ? "" : " is-on"}`}
+                    aria-pressed={!column.nullable}
+                    title={column.nullable ? "may hold no value" : "must hold a value"}
+                    onClick={() => update(column.id, { nullable: !column.nullable })}
+                  >
+                    {column.nullable ? "nullable" : "not null"}
+                  </button>
+                )}
                 <button
                   type="button"
                   className={`vg-btn is-ghost${column.primary_key ? " is-on" : ""}`}

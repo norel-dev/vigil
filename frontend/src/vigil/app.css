@@ -116,7 +116,7 @@ body { margin: 0; overflow: hidden; }
 .dp-cols { border: 1px solid var(--vg-border); }
 .dp-col-row {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1.1fr) minmax(0, 1fr) auto auto 26px;
+  grid-template-columns: 20px minmax(0, 1.1fr) minmax(0, 1fr) minmax(74px, auto) auto 26px;
   gap: var(--vg-s-2);
   align-items: center;
   padding: var(--vg-s-2) var(--vg-s-3);
@@ -124,6 +124,19 @@ body { margin: 0; overflow: hidden; }
 }
 .dp-col-row:last-child { border-bottom: 0; }
 .dp-col-n { font-family: var(--vg-font-mono); font-size: 10px; color: var(--vg-fg-muted); text-align: right; }
+
+/* A key column must hold a value, so its NOT NULL is a consequence rather than
+   a question. It is stated where the toggle would have been, and reads as lit
+   as the toggle it replaces — a control dimmed by `:disabled` would say the
+   opposite of what is true, that the column is least certainly not-null
+   exactly when it is most certainly so. */
+.dp-col-fact {
+  align-self: center;
+  border-color: var(--vg-interactive);
+  color: var(--vg-fg-primary);
+  padding: 5px 8px;
+  text-align: center;
+}
 
 /* -- The statement well ----------------------------------------------------- */
 /* The console's one loud idea: the statement is never hidden. It is composed
@@ -532,7 +545,7 @@ body { margin: 0; overflow: hidden; }
 
 @media (max-width: 760px) {
   .dp-field-pair { grid-template-columns: minmax(0, 1fr); }
-  .dp-col-row { grid-template-columns: 16px minmax(0, 1fr) minmax(0, 1fr) auto auto 24px; }
+  .dp-col-row { grid-template-columns: 16px minmax(0, 1fr) minmax(0, 1fr) minmax(74px, auto) auto 24px; }
 }
 
 /* -- Pickers ---------------------------------------------------------------- */
