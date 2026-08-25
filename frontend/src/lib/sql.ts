@@ -57,15 +57,21 @@ export function selectStatement(table: string, limit: number): string {
  */
 export function createTableSketch(
   name: string,
-  columns: { name: string; type: string; nullable: boolean }[],
+  columns: { name: string; type: string; nullable: boolean; primary_key: boolean }[],
 ): string {
-  const body = columns
-    .map((column) => {
-      const label = column.name || "«name»";
-      const type = column.type || "«type»";
-      return `  ${label} ${type}${column.nullable ? "" : " NOT NULL"}`;
-    })
-    .join(",\n");
+  const lines = columns.map((column) => {
+    const label = column.name || "«name»";
+    const type = column.type || "«type»";
+    return `  ${label} ${type}${column.nullable ? "" : " NOT NULL"}`;
+  });
+
+  // A key of one column is written the same way as a key of several, because
+  // that is the one form the platform emits for both. Writing PRIMARY KEY
+  // against a lone column here would print a shape the reader will not get.
+  const key = columns.filter((column) => column.primary_key).map((column) => column.name || "«name»");
+  if (key.length > 0) lines.push(`  PRIMARY KEY (${key.join(", ")})`);
+
+  const body = lines.join(",\n");
   return `CREATE TABLE ${name || "«name»"} (\n${body || "  «no columns yet»"}\n)`;
 }
 

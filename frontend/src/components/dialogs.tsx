@@ -221,7 +221,7 @@ export function NewTableDialog(props: {
   const [datastore, setDatastore] = useState(stores[0]?.name ?? "");
   const [description, setDescription] = useState("");
   const [columns, setColumns] = useState<DraftColumn[]>([
-    { id: nextId(), name: "id", type: "INTEGER", nullable: false },
+    { id: nextId(), name: "id", type: "INTEGER", nullable: false, primary_key: true },
   ]);
   const { busy, problem, submit } = useSubmit();
 
@@ -231,6 +231,17 @@ export function NewTableDialog(props: {
 
   const update = (id: string, patch: Partial<DraftColumn>) =>
     setColumns((all) => all.map((column) => (column.id === id ? { ...column, ...patch } : column)));
+
+  /**
+   * Put a column into the key, or take it out.
+   *
+   * The platform refuses a key column that may hold no value, so joining the
+   * key is what settles the question: the mark brings NOT NULL with it and
+   * the nullable toggle goes quiet for as long as the column is in the key.
+   * The contradiction is never composable, so it never has to be explained.
+   */
+  const mark = (id: string, inKey: boolean) =>
+    update(id, inKey ? { primary_key: true, nullable: false } : { primary_key: false });
 
   return (
     <Dialog eyebrow="table" title="Create a table" onDismiss={props.onDismiss} width={640}>
@@ -243,10 +254,11 @@ export function NewTableDialog(props: {
               name: name.trim(),
               datastore,
               description: description.trim() || null,
-              columns: columns.map(({ name, type, nullable }) => ({
+              columns: columns.map(({ name, type, nullable, primary_key }) => ({
                 name: name.trim(),
                 type: type.trim(),
                 nullable,
+                primary_key,
               })),
             });
             props.onCreated(name.trim());
@@ -338,10 +350,30 @@ export function NewTableDialog(props: {
                   type="button"
                   className={`vg-btn is-ghost${column.nullable ? "" : " is-on"}`}
                   aria-pressed={!column.nullable}
-                  title={column.nullable ? "may hold no value" : "must hold a value"}
+                  disabled={column.primary_key}
+                  title={
+                    column.primary_key
+                      ? "a key column must hold a value"
+                      : column.nullable
+                        ? "may hold no value"
+                        : "must hold a value"
+                  }
                   onClick={() => update(column.id, { nullable: !column.nullable })}
                 >
                   {column.nullable ? "nullable" : "not null"}
+                </button>
+                <button
+                  type="button"
+                  className={`vg-btn is-ghost${column.primary_key ? " is-on" : ""}`}
+                  aria-pressed={column.primary_key}
+                  title={
+                    column.primary_key
+                      ? "part of the primary key"
+                      : "make this part of the primary key"
+                  }
+                  onClick={() => mark(column.id, !column.primary_key)}
+                >
+                  key
                 </button>
                 <button
                   type="button"
@@ -359,12 +391,21 @@ export function NewTableDialog(props: {
             Types are written in the dialect of whichever engine will hold the table — INTEGER, REAL,
             TEXT, VARCHAR(255), TIMESTAMP. The platform does not try to understand them.
           </span>
+          <span className="dp-field-gloss">
+            Every column marked <b>key</b> forms one primary key together, in the order above, so one
+            mark makes a single-column key and several make a composite one. A key column must hold a
+            value, so marking it settles that too. This is the only moment a key can be asked for —
+            it cannot be added to the table afterwards.
+          </span>
           <div>
             <button
               type="button"
               className="vg-btn is-ghost"
               onClick={() =>
-                setColumns((all) => [...all, { id: nextId(), name: "", type: "TEXT", nullable: true }])
+                setColumns((all) => [
+                  ...all,
+                  { id: nextId(), name: "", type: "TEXT", nullable: true, primary_key: false },
+                ])
               }
             >
               + column

@@ -49,6 +49,12 @@ export interface ColumnDefinition {
   name: string;
   type: string;
   nullable: boolean;
+  /**
+   * Whether the column is part of the table's primary key. Every column
+   * marked so forms one key together, in the order the columns were given,
+   * and none of them may be nullable — the platform refuses the pair.
+   */
+  primary_key: boolean;
 }
 
 export interface QueryResponse {

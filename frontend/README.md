@@ -65,6 +65,14 @@ and configure the MinIO datastore with the endpoint clients actually reach.
 - **Adding a column and inserting a row** are ordinary statements through the
   query endpoint. Both forms print the SQL they composed before running it —
   see below.
+- **A primary key is asked for by marking columns**, one at a time, in `create
+  table`. Every marked column forms one key together in the order shown, so one
+  mark makes a single-column key and several make a composite one. Marking a
+  column also makes it `not null` and disables that toggle, because the
+  platform refuses a key column that may hold no value; the contradiction is
+  not composable here, so it never has to be explained. `create table` is the
+  only place the mark appears — a key cannot be added by an `ALTER`, which is
+  why `add column` has no such toggle.
 - **Uploading** is two steps, and the dialog lists both before either runs:
   record the blob, then PUT the bytes to the signed URL that comes back.
 - **A blob's record and its bytes** are separate facts. `stored: null` means
