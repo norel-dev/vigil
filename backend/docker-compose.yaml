@@ -109,7 +109,7 @@ services:
   # The console is on 9001, so `http://localhost:9001` shows what the tests
   # and the API have actually written.
   minio:
-    image: quay.io/minio/minio:latest
+    image: cgr.dev/chainguard/minio
     container_name: dataplatform-minio
     ports:
       - "${MINIO_PORT:-9000}:9000"
