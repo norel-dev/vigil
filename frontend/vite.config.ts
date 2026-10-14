@@ -15,19 +15,31 @@ import react from "@vitejs/plugin-react";
  * so the URL cannot simply be rewritten to localhost: it has to be sent to
  * localhost while still claiming to be addressed to `minio:9000`. That is the
  * one thing this proxy does.
+ *
+ * Both targets default to the laptop. The compose file points them at the
+ * services instead, since inside a container 127.0.0.1 is the container.
  */
+const apiTarget = process.env.API_PROXY_TARGET ?? "http://127.0.0.1:8000";
+const blobTarget = process.env.BLOB_PROXY_TARGET ?? "http://127.0.0.1:9000";
+
 export default defineConfig({
   plugins: [react()],
+  // In the image the project is mounted read-only, so the cache goes beside
+  // the dependencies instead of under the project.
+  cacheDir: process.env.VITE_CACHE_DIR ?? "node_modules/.vite",
   server: {
     port: 5173,
+    // A bind mount from a macOS or Windows host delivers no filesystem events
+    // into the container, so there the watcher has to poll.
+    watch: process.env.VITE_USE_POLLING === "true" ? { usePolling: true } : undefined,
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8000",
+        target: apiTarget,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },
       "/blob": {
-        target: "http://127.0.0.1:9000",
+        target: blobTarget,
         changeOrigin: false,
         // Set on the options rather than in a `proxyReq` handler. A request
         // carrying `Expect: 100-continue` has already flushed its headers by

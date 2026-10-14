@@ -1,0 +1,10 @@
+node_modules
+dist
+.vite
+tsconfig.tsbuildinfo
+design/
+.claude
+agent-knowledge
+.DS_Store
+.env
+.env.*
