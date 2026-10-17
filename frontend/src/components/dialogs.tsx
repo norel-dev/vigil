@@ -15,12 +15,6 @@ import { Field, Problem, Sketch } from "./bits";
 import { addColumnStatement, createTableSketch, insertStatement, isIdentifier } from "../lib/sql";
 import { bytes } from "../lib/format";
 
-/* ============================================================================
-   Every dialog that changes something prints what it is about to do first.
-   For a table that is the statement itself; for an upload it is the two steps
-   the platform actually takes, listed before either of them runs.
-   ========================================================================== */
-
 function useSubmit() {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -60,11 +54,7 @@ export function NewWorkspaceDialog(props: {
           });
         }}
       >
-        <Field
-          label="name"
-          htmlFor="dp-ws-name"
-          gloss="Names are unique across the platform, and this is what people will call the workspace."
-        >
+        <Field label="name" htmlFor="dp-ws-name" gloss="Must be unique.">
           <input
             id="dp-ws-name"
             className="vg-input is-lg"
@@ -74,16 +64,12 @@ export function NewWorkspaceDialog(props: {
             onChange={(event) => setName(event.target.value)}
           />
         </Field>
-        <Field
-          label="description"
-          htmlFor="dp-ws-desc"
-          gloss="What the workspace is for. Optional, and worth writing: it is what the next person reads."
-        >
+        <Field label="description" htmlFor="dp-ws-desc">
           <input
             id="dp-ws-desc"
             className="vg-input is-lg"
             value={description}
-            placeholder="what this workspace is for"
+            placeholder="optional"
             onChange={(event) => setDescription(event.target.value)}
           />
         </Field>
@@ -102,14 +88,12 @@ export function NewWorkspaceDialog(props: {
   );
 }
 
-/** The ladder, lowest rung first, in the order the policy builds it. */
+/** Lowest to highest. */
 const ROLES: ProjectRole[] = ["viewer", "editor", "admin", "owner"];
 
 export function GrantDialog(props: {
   project: Uuid;
-  /** What the reader may do here, so the form offers only what will be allowed. */
   rights: Rights;
-  /** Who is already in the workspace, which is half of what the policy judges. */
   members: Membership[];
   onDismiss: () => void;
   onGranted: () => void;
@@ -118,10 +102,7 @@ export function GrantDialog(props: {
   const [role, setRole] = useState<ProjectRole>("editor");
   const { busy, problem, submit } = useSubmit();
 
-  // The role somebody holds now is as much a part of the question as the one
-  // being asked for: the policy will not let an owner be lowered, and will not
-  // let anybody but an owner create one. Matching the typed address against the
-  // membership list is what lets the form say so before it is submitted.
+  // Whether a grant is allowed depends on the role the person already holds.
   const typed = email.trim().toLowerCase();
   const current =
     props.members.find((member) => member.email.toLowerCase() === typed)?.role ?? null;
@@ -143,11 +124,7 @@ export function GrantDialog(props: {
         <Field
           label="email"
           htmlFor="dp-grant-email"
-          gloss={
-            current
-              ? `They are already in this workspace, as ${current}. Granting again moves them.`
-              : "They must already be a user of the platform. Granting a role does not create one."
-          }
+          gloss={current ? `Currently ${current}.` : "Must be an existing user."}
         >
           <input
             id="dp-grant-email"
@@ -162,7 +139,7 @@ export function GrantDialog(props: {
         <Field
           label="role"
           htmlFor="dp-grant-role"
-          gloss="Roles are ordered, and each includes everything below it. A viewer reads; an editor writes rows and uploads; an admin manages members; an owner creates and deletes objects, and decides who is in the workspace at all. Only an owner may hand out the owner role, and it cannot be taken back."
+          gloss="viewer < editor < admin < owner. Owner can't be revoked."
         >
           <select
             id="dp-grant-role"
@@ -232,16 +209,7 @@ export function NewTableDialog(props: {
   const update = (id: string, patch: Partial<DraftColumn>) =>
     setColumns((all) => all.map((column) => (column.id === id ? { ...column, ...patch } : column)));
 
-  /**
-   * Put a column into the key, or take it out.
-   *
-   * The platform refuses a key column that may hold no value, so joining the
-   * key is what settles the question rather than leaving it open: the mark
-   * brings NOT NULL with it, and for as long as the column is in the key that
-   * is shown as a fact rather than offered as a toggle, because it is a
-   * consequence and would not answer a click. The contradiction is never
-   * composable, so it never has to be explained.
-   */
+  /** Key columns are always NOT NULL. */
   const mark = (id: string, inKey: boolean) =>
     update(id, inKey ? { primary_key: true, nullable: false } : { primary_key: false });
 
@@ -268,11 +236,7 @@ export function NewTableDialog(props: {
         }}
       >
         <div className="dp-field-pair">
-          <Field
-            label="name"
-            htmlFor="dp-tbl-name"
-            gloss="A plain SQL identifier. This is what members write in their statements."
-          >
+          <Field label="name" htmlFor="dp-tbl-name">
             <input
               id="dp-tbl-name"
               className="vg-input is-lg"
@@ -285,10 +249,7 @@ export function NewTableDialog(props: {
           <Field
             label="datastore"
             htmlFor="dp-tbl-store"
-            gloss={
-              stores.find((entry) => entry.name === datastore)?.description ??
-              "Where the rows will actually live."
-            }
+            gloss={stores.find((entry) => entry.name === datastore)?.description ?? undefined}
           >
             <select
               id="dp-tbl-store"
@@ -306,22 +267,15 @@ export function NewTableDialog(props: {
         </div>
 
         {!nameOk && (
-          <Problem>
-            “{name.trim()}” is not a plain SQL identifier. Use letters, digits and underscores, and
-            do not start with a digit.
-          </Problem>
+          <Problem>Use letters, digits and underscores; don't start with a digit.</Problem>
         )}
 
-        <Field
-          label="description"
-          htmlFor="dp-tbl-desc"
-          gloss="What the table is for. Optional."
-        >
+        <Field label="description" htmlFor="dp-tbl-desc">
           <input
             id="dp-tbl-desc"
             className="vg-input is-lg"
             value={description}
-            placeholder="what this table holds"
+            placeholder="optional"
             onChange={(event) => setDescription(event.target.value)}
           />
         </Field>
@@ -349,7 +303,7 @@ export function NewTableDialog(props: {
                   onChange={(event) => update(column.id, { type: event.target.value })}
                 />
                 {column.primary_key ? (
-                  <span className="vg-tag dp-col-fact" title="a key column must hold a value">
+                  <span className="vg-tag dp-col-fact">
                     not null
                   </span>
                 ) : (
@@ -357,7 +311,6 @@ export function NewTableDialog(props: {
                     type="button"
                     className={`vg-btn is-ghost${column.nullable ? "" : " is-on"}`}
                     aria-pressed={!column.nullable}
-                    title={column.nullable ? "may hold no value" : "must hold a value"}
                     onClick={() => update(column.id, { nullable: !column.nullable })}
                   >
                     {column.nullable ? "nullable" : "not null"}
@@ -367,11 +320,7 @@ export function NewTableDialog(props: {
                   type="button"
                   className={`vg-btn is-ghost${column.primary_key ? " is-on" : ""}`}
                   aria-pressed={column.primary_key}
-                  title={
-                    column.primary_key
-                      ? "part of the primary key"
-                      : "make this part of the primary key"
-                  }
+                  title="primary key"
                   onClick={() => mark(column.id, !column.primary_key)}
                 >
                   key
@@ -389,14 +338,7 @@ export function NewTableDialog(props: {
             ))}
           </div>
           <span className="dp-field-gloss">
-            Types are written in the dialect of whichever engine will hold the table — INTEGER, REAL,
-            TEXT, VARCHAR(255), TIMESTAMP. The platform does not try to understand them.
-          </span>
-          <span className="dp-field-gloss">
-            Every column marked <b>key</b> forms one primary key together, in the order above, so one
-            mark makes a single-column key and several make a composite one. A key column must hold a
-            value, so marking it settles that too. This is the only moment a key can be asked for —
-            it cannot be added to the table afterwards.
+            The primary key can't be changed after the table is created.
           </span>
           <div>
             <button
@@ -415,13 +357,8 @@ export function NewTableDialog(props: {
         </div>
 
         <div className="dp-field">
-          <span className="dp-field-label">what will be created</span>
+          <span className="dp-field-label">preview</span>
           <Sketch statement={createTableSketch(name.trim(), columns)} prompt="≡" />
-          <span className="dp-field-gloss">
-            A sketch, not the statement that runs. The platform writes the real one and generates the
-            name the datastore holds it under, because that datastore holds other workspaces' tables
-            too.
-          </span>
         </div>
 
         {problem && <Problem>{problem}</Problem>}
@@ -467,7 +404,7 @@ export function AddColumnDialog(props: {
         }}
       >
         <div className="dp-field-pair">
-          <Field label="name" htmlFor="dp-col-name" gloss="A plain SQL identifier.">
+          <Field label="name" htmlFor="dp-col-name">
             <input
               id="dp-col-name"
               className="vg-input is-lg"
@@ -477,7 +414,7 @@ export function AddColumnDialog(props: {
               onChange={(event) => setName(event.target.value)}
             />
           </Field>
-          <Field label="type" htmlFor="dp-col-type" gloss="In the datastore's own dialect.">
+          <Field label="type" htmlFor="dp-col-type">
             <input
               id="dp-col-type"
               className="vg-input is-lg"
@@ -490,12 +427,9 @@ export function AddColumnDialog(props: {
         </div>
 
         <div className="dp-field">
-          <span className="dp-field-label">what will run</span>
+          <span className="dp-field-label">sql</span>
           <Sketch statement={statement} />
-          <span className="dp-field-gloss">
-            A column added to a table that already has rows must allow no value, so this one is added
-            nullable. Every existing row will read null in it.
-          </span>
+          <span className="dp-field-gloss">The column is added as nullable.</span>
         </div>
 
         {problem && <Problem>{problem}</Problem>}
@@ -556,7 +490,7 @@ export function InsertRowDialog(props: {
                 className="vg-input is-lg"
                 value={values[column] ?? ""}
                 spellCheck={false}
-                placeholder="leave blank for null"
+                placeholder="default"
                 onChange={(event) =>
                   setValues((all) => ({ ...all, [column]: event.target.value }))
                 }
@@ -566,12 +500,8 @@ export function InsertRowDialog(props: {
         </div>
 
         <div className="dp-field">
-          <span className="dp-field-label">what will run</span>
+          <span className="dp-field-label">sql</span>
           <Sketch statement={statement} />
-          <span className="dp-field-gloss">
-            Anything that reads as a number is written as one; everything else is quoted. A blank
-            field is left out of the statement entirely, so the column takes its default.
-          </span>
         </div>
 
         {problem && <Problem>{problem}</Problem>}
@@ -679,24 +609,19 @@ export function UploadDialog(props: {
             <>
               <strong style={{ color: "var(--vg-fg-primary)", fontWeight: 400 }}>{file.name}</strong>
               <span>
-                {bytes(file.size)} · {file.type || "type unstated"}
+                {bytes(file.size)} · {file.type || "unknown type"}
               </span>
-              <span>choose another, or drop one here</span>
             </>
           ) : (
             <>
-              <span>drop a photo or a video here</span>
-              <span style={{ color: "var(--vg-interactive)" }}>or choose a file</span>
+              <span>drop a file here</span>
+              <span style={{ color: "var(--vg-interactive)" }}>or browse</span>
             </>
           )}
         </label>
 
         <div className="dp-field-pair">
-          <Field
-            label="key"
-            htmlFor="dp-blob-key"
-            gloss="What the workspace will call it. Slashes are part of the name rather than folders, so nothing has to be created first."
-          >
+          <Field label="key" htmlFor="dp-blob-key">
             <input
               id="dp-blob-key"
               className="vg-input is-lg"
@@ -709,10 +634,7 @@ export function UploadDialog(props: {
           <Field
             label="datastore"
             htmlFor="dp-blob-store"
-            gloss={
-              stores.find((entry) => entry.name === datastore)?.description ??
-              "Where the bytes will actually live."
-            }
+            gloss={stores.find((entry) => entry.name === datastore)?.description ?? undefined}
           >
             <select
               id="dp-blob-store"
@@ -729,32 +651,26 @@ export function UploadDialog(props: {
           </Field>
         </div>
 
-        <Field label="description" htmlFor="dp-blob-desc" gloss="What the file is. Optional.">
+        <Field label="description" htmlFor="dp-blob-desc">
           <input
             id="dp-blob-desc"
             className="vg-input is-lg"
             value={description}
-            placeholder="what this file is"
+            placeholder="optional"
             onChange={(event) => setDescription(event.target.value)}
           />
         </Field>
 
         <div className="dp-field">
-          <span className="dp-field-label">what will happen</span>
+          <span className="dp-field-label">progress</span>
           <ul className="vg-steps">
             <li className={`vg-step is-${steps[0]}`}>
               <span className="vg-step-mark">{mark(steps[0])}</span>
-              <span className="vg-step-name">record</span>
-              <span className="vg-step-desc">
-                the platform writes down the blob and hands back a url to upload through
-              </span>
+              <span className="vg-step-name">create</span>
             </li>
             <li className={`vg-step is-${steps[1]}`}>
               <span className="vg-step-mark">{mark(steps[1])}</span>
-              <span className="vg-step-name">send</span>
-              <span className="vg-step-desc">
-                the bytes go straight to the store, signed for one put of this one key
-              </span>
+              <span className="vg-step-name">upload</span>
             </li>
           </ul>
         </div>

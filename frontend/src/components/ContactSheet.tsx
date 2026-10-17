@@ -4,15 +4,7 @@ import { downloadUrl } from "../lib/media";
 import { bytes } from "../lib/format";
 import { resolve } from "../viewers/registry";
 
-/**
- * The contact sheet.
- *
- * Some blobs can be looked at and the rest can only be named, so the sheet
- * asks each one's viewer which it is rather than keeping its own list of the
- * formats that make pictures. A blob whose bytes have never arrived is a state
- * the API models on purpose, and it gets a dashed frame of its own here: solid
- * means empty, dashed means deliberately not there.
- */
+/** Thumbnail grid of blobs. Blobs without uploaded bytes get a dashed frame. */
 export function ContactSheet(props: {
   project: Uuid;
   views: BlobView[];
@@ -62,13 +54,13 @@ function Shot(props: { project: Uuid; view: BlobView; on: boolean; onOpen: () =>
     >
       <span className={`dp-shot-stage${stored === null ? " is-hollow" : ""}`}>
         {stored === null ? (
-          <span className="dp-shot-glyph">recorded · no bytes</span>
+          <span className="dp-shot-glyph">not uploaded</span>
         ) : broken ? (
-          <span className="dp-shot-glyph">preview refused</span>
+          <span className="dp-shot-glyph">no preview</span>
         ) : !showable || Thumb === undefined ? (
           <span className="dp-shot-glyph">{viewer.kind}</span>
         ) : url === null ? (
-          <span className="dp-shot-glyph">signing…</span>
+          <span className="dp-shot-glyph">loading…</span>
         ) : (
           <Thumb url={url} stored={stored} blob={blob} onBroken={() => setBroken(true)} />
         )}
@@ -78,7 +70,7 @@ function Shot(props: { project: Uuid; view: BlobView; on: boolean; onOpen: () =>
           {blob.key}
         </span>
         <span className="dp-shot-meta">
-          {stored ? bytes(stored.size) : "empty"} · {viewer.kind}
+          {stored ? `${bytes(stored.size)} · ` : ""}{viewer.kind}
         </span>
       </span>
     </button>

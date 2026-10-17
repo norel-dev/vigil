@@ -1,13 +1,4 @@
-/* =============================================================================
-   Vigil — Components
-
-   The visual vocabulary, and nothing else. Every value here resolves to a
-   --vg-* token from tokens.css; no component invents a colour, a size, or a
-   duration of its own.
-
-   Naming: one `vg-` prefix, `is-` for state, `has-` for opt-in structure.
-   Nothing here knows what the application does.
-   ============================================================================= */
+/* ── Vigil — Components ── */
 
 /* ─── Reset ─────────────────────────────────────────────────────────────── */
 
@@ -15,10 +6,7 @@
 html, body, #root { height: 100%; }
 body { overflow: hidden; margin: 0; }
 
-/* Monospace is the DEFAULT voice of the whole interface. Serif and sans are
-   opted into, element by element, by the few components that earn them. Build
-   it in this order — defaulting to sans and opting into mono produces a
-   subtly, definitely different product. */
+/* Monospace by default. */
 .vg-app, .vg-app *,
 .vg-modal, .vg-modal *,
 .vg-dialog, .vg-dialog *,
@@ -31,12 +19,7 @@ body { overflow: hidden; margin: 0; }
 @keyframes vg-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 @keyframes vg-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
-/* =============================================================================
-   1 · SHELL
-   A fixed frame with exactly one scrolling region. This is what makes the
-   interface read as an application that is running rather than a page that is
-   displayed, and it is not optional.
-   ============================================================================= */
+/* ── 1 · SHELL ── */
 
 .vg-app {
   display: grid;
@@ -66,8 +49,7 @@ body { overflow: hidden; margin: 0; }
   color: var(--vg-fg-secondary);
 }
 
-/* A <button>, so it must undo the user-agent styling explicitly — otherwise
-   ButtonFace paints the corner of the tabline white on every platform. */
+/* Reset user-agent button styles. */
 .vg-brand {
   display: flex; align-items: center; gap: 6px;
   align-self: stretch;
@@ -105,8 +87,7 @@ body { overflow: hidden; margin: 0; }
   background: var(--vg-surface);
   position: relative;
 }
-/* The active marker is a 2px accent bar on the TOP edge — not an underline,
-   not a fill. */
+/* Active tab: 2px accent bar on the top edge. */
 .vg-tab.is-active::before {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
   background: var(--vg-interactive);
@@ -152,8 +133,7 @@ body { overflow: hidden; margin: 0; }
   padding: 0 32px 40px 32px;
 }
 
-/* Opt-in: a fake line-number gutter, for surfaces that want the text-editor
-   metaphor stated outright rather than implied. */
+/* Opt-in line-number gutter. */
 .vg-canvas.has-gutter {
   background-image:
     linear-gradient(to right, transparent 0, transparent 40px,
@@ -191,8 +171,7 @@ body { overflow: hidden; margin: 0; }
   box-shadow: 0 0 6px currentColor;
   animation: vg-pulse 2s ease-in-out infinite;
 }
-/* The right edge fades rather than clipping — a headline sliced mid-word by a
-   hard border reads as a rendering fault. */
+/* Fade the right edge. */
 .vg-ticker-track-wrap {
   flex: 1; overflow: hidden; position: relative;
   display: flex; align-items: center;
@@ -250,8 +229,7 @@ body { overflow: hidden; margin: 0; }
   padding: 0;
   caret-color: var(--vg-interactive);
 }
-/* Chrome fields opt out of the focus ring: the caret already says where you
-   are, and a ring inside a 22px bar is noise. */
+/* No focus ring in chrome fields. */
 .vg-cmdline-field:focus-visible { box-shadow: none; }
 .vg-cmdline-msg { color: var(--vg-fg-secondary); }
 .vg-cmdline-msg.is-error { color: var(--vg-conf-low); }
@@ -264,9 +242,7 @@ body { overflow: hidden; margin: 0; }
 
 /* ─── 1.5 Statusline ────────────────────────────────────────────────────── */
 
-/* The statusline is the one row that is always on screen and always being
-   glanced at rather than read, so it is set a step larger than the rest of the
-   chrome — 28px tall against the command line's 22px. */
+/* Statusline is slightly larger than the rest of the chrome. */
 .vg-statusline {
   grid-area: status;
   background: var(--vg-base);
@@ -282,8 +258,7 @@ body { overflow: hidden; margin: 0; }
   border-right: 1px solid var(--vg-border);
   white-space: nowrap;
 }
-/* A segment that is also a control. It keeps the segment's dividing rule and
-   resets everything a user-agent button would otherwise paint. */
+/* A segment that is also a control. */
 .vg-seg.is-action {
   background: none;
   border: 0; border-right: 1px solid var(--vg-border);
@@ -323,11 +298,7 @@ body { overflow: hidden; margin: 0; }
 }
 .vg-dot-alert { width: 6px; height: 6px; border-radius: 50%; background: var(--vg-signal); box-shadow: 0 0 6px var(--vg-signal); }
 
-/* =============================================================================
-   2 · LAYOUT PRIMITIVES
-   Three, deliberately. Composition happens by nesting these, not by inventing
-   a new grid per surface.
-   ============================================================================= */
+/* ── 2 · LAYOUT PRIMITIVES ── */
 
 /* Vertical rhythm between sections. */
 .vg-stack { display: flex; flex-direction: column; gap: 30px; min-width: 0; }
@@ -355,11 +326,7 @@ body { overflow: hidden; margin: 0; }
   .vg-cols.is-even { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* =============================================================================
-   3 · SECTION HEADER
-   The most-used component in the system. Every panel opens with one, and the
-   description line is mandatory — see the voice rules.
-   ============================================================================= */
+/* ── 3 · SECTION HEADER ── */
 
 .vg-sect-head {
   display: flex; align-items: baseline; gap: 10px;
@@ -393,7 +360,6 @@ body { overflow: hidden; margin: 0; }
 .vg-sect-right { display: inline-flex; gap: 8px; align-items: center; }
 
 /* Global switch for the description lines. */
-[data-gloss="off"] .vg-sect-desc { display: none; }
 
 /* The terminal-flavoured variant: ── name [n] ────────────  :right-action */
 .vg-rule {
@@ -407,9 +373,7 @@ body { overflow: hidden; margin: 0; }
 .vg-rule-fill { color: var(--vg-fg-muted); overflow: hidden; flex: 1; }
 .vg-rule-right { color: var(--vg-fg-secondary); flex-shrink: 0; padding-left: 8px; }
 
-/* =============================================================================
-   4 · PAGE HEADER
-   ============================================================================= */
+/* ── 4 · PAGE HEADER ── */
 
 .vg-head {
   display: grid;
@@ -451,11 +415,7 @@ body { overflow: hidden; margin: 0; }
 .vg-head-side { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; padding-bottom: 2px; }
 .vg-head-meta { font-size: 11px; color: var(--vg-fg-muted); letter-spacing: 0.02em; display: flex; gap: 8px; flex-wrap: wrap; }
 
-/* =============================================================================
-   5 · BUTTONS
-   Lowercase verbs. Outline-only emphasis — there is no filled primary button
-   anywhere in the system, by design.
-   ============================================================================= */
+/* ── 5 · BUTTONS ── */
 
 .vg-btn {
   display: inline-flex; align-items: center; gap: 7px;
@@ -523,9 +483,7 @@ body { overflow: hidden; margin: 0; }
 .vg-toggle:hover { color: var(--vg-fg-secondary); }
 .vg-toggle.is-on { color: var(--vg-interactive); }
 
-/* =============================================================================
-   6 · CHIPS, TAGS, TOKENS
-   ============================================================================= */
+/* ── 6 · CHIPS, TAGS, TOKENS ── */
 
 .vg-chip {
   display: inline-flex; align-items: center; gap: 7px;
@@ -543,8 +501,7 @@ body { overflow: hidden; margin: 0; }
 .vg-chip.is-med  { border-color: rgba(212, 166, 71, 0.5);  color: var(--vg-conf-med); }
 .vg-chip.is-low  { border-color: var(--vg-conf-low);       color: var(--vg-conf-low); }
 
-/* Status tag. Exactly one variant is filled — reserve it for the single most
-   urgent state in the product. */
+/* Status tag. */
 .vg-tag {
   display: inline-block;
   padding: 1px 6px;
@@ -562,8 +519,7 @@ body { overflow: hidden; margin: 0; }
 .vg-tag.is-med      { color: var(--vg-conf-med); }
 .vg-tag.is-low      { color: var(--vg-conf-low); }
 
-/* Removable filter token. The one intentionally rounded element in the system:
-   it is a token, not a control, and the border turns red to signal removal. */
+/* Removable filter token. */
 .vg-token {
   display: inline-flex; align-items: baseline; gap: 4px;
   background: var(--vg-surface-raised);
@@ -585,9 +541,7 @@ body { overflow: hidden; margin: 0; }
   line-height: 14px;
 }
 
-/* =============================================================================
-   7 · FORM CONTROLS
-   ============================================================================= */
+/* ── 7 · FORM CONTROLS ── */
 
 .vg-input {
   background: var(--vg-surface-raised);
@@ -615,11 +569,7 @@ body { overflow: hidden; margin: 0; }
 .vg-field::placeholder { color: var(--vg-fg-muted); }
 .vg-prompt { font-family: var(--vg-font-mono); font-size: 12px; color: var(--vg-interactive); }
 
-/* Inline find: a borderless field on a hairline, for narrowing a list in place
-   rather than in a dialog. Its sigil is `/` against the command line's `:`, so
-   the two prompts in the interface read the way they read in a terminal
-   editor. Like the command line it opts out of the focus ring, because the
-   accent caret already says where you are. */
+/* Inline find field. */
 .vg-find {
   display: flex; align-items: center; gap: 8px;
   padding: 3px 8px;
@@ -646,8 +596,7 @@ body { overflow: hidden; margin: 0; }
 }
 .vg-find-clear:hover { color: var(--vg-conf-low); }
 
-/* The run of a label that matched. A wash rather than a colour, so the text
-   keeps its own weight and the row still reads as one string. */
+/* Search match highlight. */
 .vg-mark {
   background: rgba(122, 180, 192, 0.28);
   color: var(--vg-fg-primary);
@@ -655,9 +604,7 @@ body { overflow: hidden; margin: 0; }
   padding: 0;
 }
 
-/* =============================================================================
-   8 · LISTS AND ROWS
-   ============================================================================= */
+/* ── 8 · LISTS AND ROWS ── */
 
 .vg-list { display: flex; flex-direction: column; }
 .vg-listrow {
@@ -744,11 +691,7 @@ body { overflow: hidden; margin: 0; }
 .vg-pick-title { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--vg-fg-muted); padding: 0 8px 8px 8px; }
 
 /* ─── 8.6 Tree ──────────────────────────────────────────────────────────── */
-/* A hierarchy read out of names that contain separators, for stores whose keys
-   only look like paths. The branches are not objects — they are what the
-   separators imply — so they are drawn quieter than the leaves and carry a
-   count where a leaf carries a state.
-   Depth is passed in as `--vg-depth` on each row. */
+/* Tree view. */
 
 .vg-tree { --vg-tree-indent: 12px; display: flex; flex-direction: column; }
 .vg-treerow {
@@ -762,8 +705,7 @@ body { overflow: hidden; margin: 0; }
   text-align: left; cursor: pointer;
   transition: background-color var(--vg-dur-fast) var(--vg-ease),
               color var(--vg-dur-fast) var(--vg-ease);
-  /* One hairline guide per level, so a leaf several deep can be traced back to
-     the branch it hangs from without counting indents. */
+  /* Indent guide per level. */
   background-image: repeating-linear-gradient(
     to right,
     var(--vg-border-faint) 0 1px,
@@ -773,8 +715,7 @@ body { overflow: hidden; margin: 0; }
   background-position: 8px 0;
 }
 .vg-treerow:hover { background-color: var(--vg-surface-raised); color: var(--vg-fg-primary); }
-/* Open object and keyboard cursor are two separate facts and get two separate
-   marks: the accent stripe is what is open, the wash is where you are. */
+/* Accent stripe = open item; background = keyboard cursor. */
 .vg-treerow.is-on { border-left-color: var(--vg-interactive); background-color: var(--vg-surface-raised); color: var(--vg-fg-primary); }
 .vg-treerow.is-cursor { background-color: var(--vg-surface); color: var(--vg-fg-primary); }
 .vg-treerow.is-on.is-cursor { background-color: var(--vg-surface-raised); }
@@ -788,9 +729,7 @@ body { overflow: hidden; margin: 0; }
 .vg-tree-meta { margin-left: auto; flex-shrink: 0; padding-left: 8px; color: var(--vg-fg-muted); font-size: 10px; }
 .vg-tree-empty { padding: 6px 10px; font-family: var(--vg-font-mono); font-size: 11px; color: var(--vg-fg-muted); line-height: 1.5; }
 
-/* =============================================================================
-   9 · KEY–VALUE AND STATUS ROWS
-   ============================================================================= */
+/* ── 9 · KEY–VALUE AND STATUS ROWS ── */
 
 .vg-kv {
   display: flex; align-items: baseline; gap: 8px;
@@ -831,9 +770,7 @@ body { overflow: hidden; margin: 0; }
 /* Explanatory note under a module. Sans, because it is prose. */
 .vg-note { margin-top: 8px; font-family: var(--vg-font-sans); font-size: 10.5px; color: var(--vg-fg-muted); line-height: 1.5; }
 
-/* =============================================================================
-   10 · HEADLINE BANDS
-   ============================================================================= */
+/* ── 10 · HEADLINE BANDS ── */
 
 /* Fact band. `is-attached` welds it to a page header directly above. */
 .vg-factband {
@@ -883,9 +820,7 @@ body { overflow: hidden; margin: 0; }
 .vg-metric-delta { font-family: var(--vg-font-mono); font-size: 10px; color: var(--vg-fg-muted); margin-top: 8px; }
 .vg-metric-delta.is-live { color: var(--vg-interactive); }
 
-/* =============================================================================
-   11 · TABLES
-   ============================================================================= */
+/* ── 11 · TABLES ── */
 
 /* Real table, for records. Wide content scrolls in its own container. */
 .vg-table-scroll { overflow-x: auto; }
@@ -907,8 +842,7 @@ body { overflow: hidden; margin: 0; }
 .vg-pager { display: flex; align-items: center; gap: 12px; padding-top: 14px; }
 .vg-pager-at { font-family: var(--vg-font-mono); font-size: 11px; color: var(--vg-fg-muted); }
 
-/* Grid "table", for mixed-media rows that need per-cell typography. Set
-   `grid-template-columns` on the parent per instance. */
+/* Grid "table", for mixed-media rows that need per-cell typography. */
 .vg-gridtable { border: 1px solid var(--vg-border); }
 .vg-gridtable-head,
 .vg-gridtable-row {
@@ -933,10 +867,7 @@ body { overflow: hidden; margin: 0; }
 .vg-cell-num   { text-align: right; font-size: 11px; color: var(--vg-fg-secondary); }
 .vg-cell-grade { text-align: right; font-weight: 600; font-size: 12px; }
 
-/* =============================================================================
-   12 · METERS
-   Small, quantitative, and never animated.
-   ============================================================================= */
+/* ── 12 · METERS ── */
 
 /* Proportional bar: segments sum to 100%. */
 .vg-meter { display: flex; height: 4px; width: 100%; background: var(--vg-surface-sunken); border: 1px solid var(--vg-border-faint); }
@@ -950,9 +881,7 @@ body { overflow: hidden; margin: 0; }
 .vg-legend { display: flex; gap: 18px; margin-top: 8px; font-family: var(--vg-font-sans); font-size: 10.5px; color: var(--vg-fg-muted); }
 .vg-legend .sq { display: inline-block; width: 8px; height: 8px; margin-right: 5px; }
 
-/* =============================================================================
-   13 · CARDS AND TILES
-   ============================================================================= */
+/* ── 13 · CARDS AND TILES ── */
 
 .vg-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
 .vg-card {
@@ -1019,9 +948,7 @@ body { overflow: hidden; margin: 0; }
 }
 .vg-tile-foot { display: flex; gap: 6px; font-family: var(--vg-font-mono); font-size: 9.5px; color: var(--vg-fg-muted); margin-top: auto; }
 
-/* Media frame with a coordinate-space overlay. The media keeps its natural
-   aspect ratio and the SVG covers it exactly, so overlay coordinates need no
-   conversion. */
+/* Media frame with a coordinate-space overlay. */
 .vg-frame { position: relative; line-height: 0; background: var(--vg-base); border: 1px solid var(--vg-border-faint); }
 .vg-frame img { display: block; width: 100%; height: auto; }
 .vg-frame-overlay { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -1063,9 +990,7 @@ body { overflow: hidden; margin: 0; }
 .vg-label.is-unplaced { border-style: dashed; color: var(--vg-fg-muted); }
 .vg-label .n { color: var(--vg-fg-muted); }
 
-/* =============================================================================
-   14 · NODE GRAPH
-   ============================================================================= */
+/* ── 14 · NODE GRAPH ── */
 
 .vg-graph { position: relative; height: 340px; border: 1px solid var(--vg-border); background: var(--vg-surface-sunken); }
 .vg-node {
@@ -1083,15 +1008,11 @@ body { overflow: hidden; margin: 0; }
 .vg-node-kind { font-size: 9.5px; color: var(--vg-fg-muted); }
 .vg-node-meta { font-family: var(--vg-font-mono); font-size: 10px; color: var(--vg-fg-secondary); }
 
-/* Edges are drawn in the token palette, never a library default. A 1px line is
-   an unfair click target, so widen the invisible interaction stroke to 18px. */
+/* Edges use token colors. */
 .vg-edge { stroke: var(--vg-border-strong); cursor: pointer; }
 .vg-edge:hover { stroke: var(--vg-interactive); }
 
-/* =============================================================================
-   15 · OVERLAYS
-   The only place shadows exist.
-   ============================================================================= */
+/* ── 15 · OVERLAYS ── */
 
 .vg-overlay {
   position: fixed; inset: 0;
@@ -1103,9 +1024,7 @@ body { overflow: hidden; margin: 0; }
 }
 .vg-overlay.is-heavy { background: rgba(0, 0, 0, 0.55); padding-top: 12vh; }
 
-/* Terminal modal: cyan border plus two corner brackets. The brackets are the
-   signature — they are what make it read as a floating window rather than a
-   card that happens to be centred. */
+/* Terminal modal: cyan border plus two corner brackets. */
 .vg-modal {
   width: 720px; max-width: 92vw; max-height: 86vh;
   background: var(--vg-surface-raised);
@@ -1175,9 +1094,7 @@ body { overflow: hidden; margin: 0; }
 .vg-palette kbd,
 .vg-modal kbd { border: 1px solid var(--vg-border-strong); padding: 1px 5px; font-size: 9.5px; color: var(--vg-fg-secondary); }
 
-/* Anchored popover. Clamp it inside its container rather than flipping it —
-   a panel that jumps to the other side of the cursor moves content away from
-   where the eye already is. */
+/* Anchored popover. */
 .vg-popover {
   position: absolute; z-index: 20;
   width: 310px; max-height: 300px; overflow-y: auto;
@@ -1191,8 +1108,7 @@ body { overflow: hidden; margin: 0; }
 .vg-popover-meta { margin: 3px 0 7px; font-family: var(--vg-font-mono); font-size: 10px; color: var(--vg-fg-secondary); }
 .vg-popover-more { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--vg-border); font-size: 10.5px; color: var(--vg-fg-muted); line-height: 1.4; }
 
-/* Hover card, revealed from an inline reference. Opens on focus-within too, so
-   it is reachable from the keyboard. */
+/* Hover card, revealed from an inline reference. */
 .vg-ref { position: relative; color: var(--vg-interactive); border-bottom: 1px dotted var(--vg-interactive); cursor: pointer; white-space: nowrap; }
 .vg-hovercard {
   position: absolute; left: 0; top: calc(100% + 6px); z-index: 70;
@@ -1209,8 +1125,7 @@ body { overflow: hidden; margin: 0; }
 .vg-ref:hover .vg-hovercard,
 .vg-ref:focus-within .vg-hovercard { opacity: 1; pointer-events: auto; transform: translateY(0); }
 
-/* Tooltip. Pure CSS, driven by a data attribute, so it works on any focusable
-   element without a portal. */
+/* Tooltip. */
 .vg-tip { position: relative; }
 .vg-tip::after {
   content: none;
@@ -1250,9 +1165,7 @@ body { overflow: hidden; margin: 0; }
 .vg-term { border-bottom: 1px dotted var(--vg-fg-muted); cursor: help; }
 .vg-term:hover { border-bottom-color: var(--vg-interactive); }
 
-/* =============================================================================
-   16 · PROSE AND MESSAGES
-   ============================================================================= */
+/* ── 16 · PROSE AND MESSAGES ── */
 
 .vg-prose {
   font-family: var(--vg-font-sans);
@@ -1303,11 +1216,7 @@ body { overflow: hidden; margin: 0; }
   white-space: pre-wrap; word-break: break-word;
 }
 
-/* =============================================================================
-   17 · STATES
-   Solid border = empty. Dashed border = deliberately withheld. The difference
-   is load-bearing; do not collapse it.
-   ============================================================================= */
+/* ── 17 · STATES ── */
 
 .vg-empty {
   border: 1px solid var(--vg-border);
@@ -1333,8 +1242,7 @@ body { overflow: hidden; margin: 0; }
   color: var(--vg-fg-muted);
 }
 
-/* Ordered progress list: every step is listed before anything runs, so the
-   reader sees what is going to happen rather than rows appearing from nowhere. */
+/* Ordered progress list. */
 .vg-steps { list-style: none; margin: 0; padding: 0; }
 .vg-step {
   display: grid; grid-template-columns: 18px 74px minmax(0, 1fr);
@@ -1354,10 +1262,7 @@ body { overflow: hidden; margin: 0; }
 .vg-step.is-skipped .vg-step-mark { color: var(--vg-conf-med); }
 .vg-step.is-failed  { color: var(--vg-conf-low); }
 
-/* =============================================================================
-   18 · DENSITY
-   One switch on the shell root. Every surface honours it.
-   ============================================================================= */
+/* ── 18 · DENSITY ── */
 
 .vg-app[data-density="compact"] { font-size: 11.5px; }
 .vg-app[data-density="compact"] .vg-canvas-inner { padding: 0 24px 32px 24px; }
@@ -1375,9 +1280,7 @@ body { overflow: hidden; margin: 0; }
 .vg-app[data-density="compact"] .vg-card        { padding: 10px 12px; gap: 8px; }
 .vg-app[data-density="compact"] .vg-prose       { font-size: 12.5px; line-height: 1.6; }
 
-/* =============================================================================
-   19 · UTILITIES
-   ============================================================================= */
+/* ── 19 · UTILITIES ── */
 
 .vg-row-flex { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .vg-spacer   { flex: 1; }

@@ -2,19 +2,11 @@ import type { ReactNode } from "react";
 import type { StoredBlob } from "../lib/api";
 import { bytes } from "../lib/format";
 
-/**
- * The stage and its caption.
- *
- * Every viewer that shows something rather than prints it says the same three
- * things underneath: what kind of thing this is, what the store calls it, and
- * how big it is. The caption is the store's account of the bytes, which is why
- * it names the stored type and not the declared one — the reader can compare
- * the two in the Record below, and this is the half that the browser acted on.
- */
+/** Media stage with a caption (kind, stored type, size). */
 export function Frame(props: {
   kind: string;
   stored: StoredBlob;
-  /** Left off where the stage draws its own edge-to-edge surface, as a page does. */
+  /** Drop the stage border, for edge-to-edge content. */
   bare?: boolean;
   children: ReactNode;
 }) {
@@ -23,27 +15,19 @@ export function Frame(props: {
       <div className={`dp-media-stage${props.bare ? " is-bare" : ""}`}>{props.children}</div>
       <figcaption className="vg-caption">
         <span className="n">{props.kind}</span>
-        <span>{props.stored.content_type ?? "type unstated"}</span>
+        <span>{props.stored.content_type ?? "unknown type"}</span>
         <span className="src">{bytes(props.stored.size)}</span>
       </figcaption>
     </figure>
   );
 }
 
-/**
- * What to say when the browser holds the bytes and still cannot play them.
- *
- * This is the common case for QuickTime: a `.mov` carrying H.265 is a valid
- * file that Safari plays and Chrome will not touch. Nothing is wrong with the
- * blob, so it is not reported as damage.
- */
+/** Shown when the browser can't decode the media (e.g. H.265 .mov in Chrome). */
 export function Undecodable({ stored }: { stored: StoredBlob }) {
   return (
     <div className="vg-withheld">
-      this browser will not decode{" "}
-      <code className="dp-inline-code">{stored.content_type ?? "these bytes"}</code>. the file is
-      intact — another browser or a local player may well open it. use{" "}
-      <strong>open bytes</strong> above to fetch it.
+      this browser can't play{" "}
+      <code className="dp-inline-code">{stored.content_type ?? "this file"}</code>
     </div>
   );
 }

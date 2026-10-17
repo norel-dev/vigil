@@ -11,19 +11,10 @@ export interface TableActions {
   insertRow: () => void;
 }
 
-/**
- * One table.
- *
- * The console's one loud idea lives here: the statement is never hidden. Add
- * a column or insert a row through a form and the form prints the SQL it
- * composed before it runs it, because the platform does not read the statement
- * either — the engine accepts or refuses it, and a reader who never saw the
- * text cannot understand the refusal.
- */
+/** A table: SQL editor and result grid. */
 export function TablePane(props: {
   project: Uuid;
   table: Table;
-  /** The policy as the console reads it, asked per act rather than once. */
   rights: Rights;
   registerActions: (actions: TableActions | null) => void;
   onRan: (verb: string, seconds: number, rows: number | null) => void;
@@ -38,10 +29,8 @@ export function TablePane(props: {
   const [overlay, setOverlay] = useState<"column" | "row" | null>(null);
 
   /**
-   * Run one statement. Returns what went wrong, or null if nothing did.
-   *
-   * A statement run from a dialog reports its refusal inside that dialog, so
-   * `quiet` keeps the message off the panel the reader cannot currently see.
+   * Run one statement; returns the error message or null.
+   * `quiet` leaves errors to the caller (dialogs show their own).
    */
   const run = useCallback(
     async (text: string, options?: { quiet?: boolean }): Promise<string | null> => {
@@ -70,7 +59,6 @@ export function TablePane(props: {
     [props.project, props.table.name],
   );
 
-  /** Reload from scratch: the shape and the first page of rows in one read. */
   const reload = useCallback(async () => {
     const text = selectStatement(props.table.name, ROW_LIMIT);
     setStatement(text);
@@ -102,9 +90,9 @@ export function TablePane(props: {
             <span className="id">· {props.table.datastore_name}</span>
           </div>
           <h1 className="vg-title is-small">{props.table.name}</h1>
-          <div className="vg-subtitle">
-            {props.table.description ?? "no description was given when this table was created"}
-          </div>
+          {props.table.description && (
+            <div className="vg-subtitle">{props.table.description}</div>
+          )}
         </div>
         <div className="vg-head-side">
           <div className="vg-head-meta">
@@ -135,7 +123,7 @@ export function TablePane(props: {
               onClick={() =>
                 props.onAskDelete({
                   title: `Delete ${props.table.name}`,
-                  body: `Deleting this table drops it and every row in it from ${props.table.datastore_name}, for good. Unlike forgetting a datastore, there is nothing left behind to reconnect to.`,
+                  body: `This permanently deletes the table and all its rows.`,
                   verb: "delete table",
                   run: async () => {
                     await api.deleteTable(props.project, props.table.name);
@@ -151,11 +139,7 @@ export function TablePane(props: {
       </header>
 
       <section>
-        <Head
-          title="Statement"
-          desc="one statement, in the dialect the datastore speaks. it may read and change this table and alter its shape, but it cannot create or drop anything, or reach another table."
-          note={`:${verbOf(statement)}`}
-        />
+        <Head title="Query" />
         <div className="dp-well">
           <div className="dp-well-head">
             <span className="dp-well-verb">{verbOf(statement)}</span>
@@ -171,7 +155,7 @@ export function TablePane(props: {
               className="dp-well-input"
               value={statement}
               spellCheck={false}
-              aria-label="statement to run"
+              aria-label="query"
               placeholder={`SELECT * FROM ${props.table.name}`}
               onChange={(event) => setStatement(event.target.value)}
               onKeyDown={(event) => {
@@ -188,7 +172,7 @@ export function TablePane(props: {
             </span>
             <span className="vg-spacer" />
             <button className="vg-btn is-ghost" onClick={() => void reload()}>
-              reset to select
+              reset
             </button>
             <button className="vg-btn is-primary" onClick={() => void run(statement)} disabled={running}>
               {running ? "running…" : "run"}
@@ -203,30 +187,18 @@ export function TablePane(props: {
       </section>
 
       <section>
-        <Head
-          title="Rows"
-          count={result !== null && read ? rows.length : undefined}
-          desc="what the last statement returned. statements that change rows return none, and say so rather than showing an empty grid."
-        />
+        <Head title="Rows" count={result !== null && read ? rows.length : undefined} />
         {problem !== null ? (
-          <Empty>
-            the statement above was refused, so nothing came back. the engine's reason is printed
-            with it — the platform does not check the statement itself, and neither reads nor
-            rewrites it.
-          </Empty>
+          <Empty>query failed</Empty>
         ) : result === null ? (
-          <Empty>{running ? "running…" : "nothing has been run against this table yet."}</Empty>
+          <Empty>{running ? "running…" : "no results"}</Empty>
         ) : !read ? (
           <Empty>
-            the last statement — <code className="dp-inline-code">{verbOf(statement)}</code> — returns
-            no rows. it finished in {fmtLatency(result.latency)}. run the select above to see what the
-            table now holds.
+            <code className="dp-inline-code">{verbOf(statement)}</code> done in{" "}
+            {fmtLatency(result.latency)}
           </Empty>
         ) : rows.length === 0 ? (
-          <Empty>
-            the table has no rows matching that statement. its shape is recorded — {columns.length}{" "}
-            {columns.length === 1 ? "column" : "columns"} — so insert a row to put something in it.
-          </Empty>
+          <Empty>no rows</Empty>
         ) : (
           <div className="vg-table-scroll">
             <table className="vg-table">

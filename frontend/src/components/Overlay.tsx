@@ -1,20 +1,12 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
-/**
- * Overlays — the only place shadows exist in this system.
- *
- * Two of them. The terminal modal, with its corner brackets, is for things
- * that read as a running operation. The plain dialog, quieter and serif-titled,
- * is for ordinary forms and choices. Everything the console asks for is a form,
- * so the dialog does most of the work.
- */
+/** `Dialog` for forms, `Modal` for terminal-style panels. */
 
 function useOverlay(onDismiss: () => void) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Give the first control focus, so a form can be filled without reaching
-    // for the mouse at all.
+    // Focus the first control.
     const first = ref.current?.querySelector<HTMLElement>(
       "input:not([type=hidden]), textarea, select, button",
     );
@@ -28,8 +20,7 @@ function useOverlay(onDismiss: () => void) {
         onDismiss();
         return;
       }
-      // Keep tabbing inside the overlay: an invisible page behind it should
-      // not be reachable.
+      // Trap focus inside the overlay.
       if (event.key !== "Tab" || !ref.current) return;
       const focusable = Array.from(
         ref.current.querySelectorAll<HTMLElement>(

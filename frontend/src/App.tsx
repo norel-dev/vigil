@@ -39,14 +39,14 @@ type Selection =
   | { kind: "table"; name: string }
   | { kind: "blob"; key: string };
 
-/** An open object. Two buffers may sit in two different workspaces at once. */
+/** An open tab. */
 interface Buffer {
   id: string;
   workspaceId: Uuid;
   selection: Selection;
 }
 
-/** Everything read for one workspace. Kept per workspace, because tabs span them. */
+/** Cached data for one workspace. */
 interface WorkspaceData {
   tables: Table[] | null;
   blobViews: BlobView[] | null;
@@ -106,7 +106,6 @@ export function App() {
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [compact, setCompact] = useState(false);
-  const [gloss, setGloss] = useState(true);
   const [last, setLast] = useState<{ verb: string; latency: string } | null>(null);
   const [rows, setRows] = useState<number | null>(null);
   const [reachable, setReachable] = useState(true);
@@ -140,7 +139,7 @@ export function App() {
         setKey("");
         setGateProblem(
           error instanceof ApiError && error.status === 401
-            ? "that key was not accepted. keys are shown once, when they are issued — if it has been revoked, the way back is a new one."
+            ? "invalid api key"
             : report(error),
         );
       } finally {
@@ -177,8 +176,7 @@ export function App() {
       try {
         const [tableList, blobList] = await Promise.all([api.listTables(id), api.listBlobs(id)]);
         tables = tableList;
-        // The record and the stored bytes are two separate facts, and only the
-        // second answers whether anything was ever uploaded. Ask for both.
+        // Fetch stored-object info too, to know which blobs have bytes.
         views = await Promise.all(
           blobList.map((blob) =>
             api.readBlob(id, blob.key).catch(() => ({ blob, stored: null }) as BlobView),
@@ -189,8 +187,7 @@ export function App() {
       } catch (error) {
         setProblem(report(error));
       }
-      // Membership is a separate question and a viewer may not be allowed to
-      // ask it, so a refusal here must not empty the rest of the workspace.
+      // Listing members may be forbidden; don't fail the whole load.
       let members: Membership[] = [];
       try {
         members = await api.listMembers(id);
@@ -216,7 +213,7 @@ export function App() {
     }
   }, [report]);
 
-  // The first workspace the reader can reach opens as the first buffer.
+  // Open the first workspace on sign-in.
   const opened = useRef(false);
   useEffect(() => {
     if (!me) return;
@@ -240,7 +237,7 @@ export function App() {
   const project = projects.find((item) => item.id === workspaceId) ?? null;
   const here = (workspaceId ? data[workspaceId] : undefined) ?? EMPTY;
 
-  // Read a workspace the moment some buffer needs it, and not before.
+  // Load workspaces lazily, when a tab needs one.
   useEffect(() => {
     for (const open of buffers) {
       if (!data[open.workspaceId]) void loadWorkspace(open.workspaceId);
@@ -248,28 +245,14 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buffers, loadWorkspace]);
 
-  // What the reader may do here is asked act by act rather than once, because
-  // the ladder does not break in a single place: an editor changes rows inside
-  // objects that already exist, an admin shapes what members may do, and only
-  // an owner brings objects into being, destroys them, or decides who is in
-  // the workspace at all.
   const rights = useMemo(() => rightsIn(me, workspaceId), [me, workspaceId]);
   const role = rights.role;
 
   /* -- Buffers: navigating, opening, closing -------------------------------- */
 
-  /**
-   * Show something in the buffer the reader is already in.
-   *
-   * A buffer is a tab, and a tab is somewhere the reader put themselves.
-   * Picking an object out of the rail is a request to look at it, not a request
-   * to rearrange the tabline — so it re-points the tab in hand and nothing else
-   * moves. Two tabs may hold the same object at once; that is the reader's
-   * business, and a second tab is only ever born by being asked for.
-   */
+  /** Show something in the active tab. */
   const goTo = useCallback(
     (ws: Uuid, selection: Selection) => {
-      // Nothing open yet — the first thing looked at needs somewhere to land.
       if (!activeBufferId || buffers.length === 0) {
         const first: Buffer = { id: nextBufferId(), workspaceId: ws, selection };
         setBuffers([first]);
@@ -286,14 +269,8 @@ export function App() {
   );
 
   /**
-   * Put something in a buffer of its own, beside the one it was opened from.
-   *
-   * The only way a buffer is born, and every caller is a reader who asked for
-   * one in so many words: the `+` control, a modifier-click, `:new tab`.
-   *
-   * The id is minted here rather than inside the state updater: an updater that
-   * mints an id and sets another piece of state is not a pure function of its
-   * argument, and React is free to run it more than once.
+   * Open something in a new tab after the active one.
+   * The id is created outside the state updater so the updater stays pure.
    */
   const openInNewBuffer = useCallback(
     (ws: Uuid, selection: Selection) => {
@@ -309,28 +286,12 @@ export function App() {
     [buffers, activeBufferId],
   );
 
-  /**
-   * The tab in hand, again, beside itself.
-   *
-   * This is what `+` and `:new tab` mean now that picking an object never mints
-   * a tab: the reader gets a second copy of where they are and navigates one of
-   * them somewhere else — which is how the same object comes to sit in two tabs.
-   */
   const duplicateBuffer = useCallback(() => {
     if (!buffer) return;
     openInNewBuffer(buffer.workspaceId, buffer.selection);
   }, [buffer, openInNewBuffer]);
 
-  /**
-   * Something has left the store, so no buffer may go on pointing at it.
-   *
-   * This has to sweep every buffer rather than only the one in hand: two of
-   * them may hold the same object now, and a buffer still aimed at a deleted
-   * object would sit on its loading line for ever, waiting for a thing the
-   * store no longer has. They fall back to the workspace overview rather than
-   * closing — a tab is somewhere the reader put themselves, and a delete
-   * elsewhere is no reason to take it away from them.
-   */
+  /** Point every tab showing a deleted object back to the workspace overview. */
   const forgetSelection = useCallback((ws: Uuid, gone: Selection) => {
     setBuffers((open) =>
       open.map((item) =>
@@ -347,7 +308,7 @@ export function App() {
       const at = buffers.findIndex((item) => item.id === id);
       const left = buffers.filter((item) => item.id !== id);
       setBuffers(left);
-      // Focus moves to the neighbour on the right, or the new last buffer.
+      // Focus the tab to the right, or the last one.
       if (activeBufferId === id) {
         setActiveBufferId(left[Math.min(at, left.length - 1)]?.id ?? null);
       }
@@ -355,7 +316,6 @@ export function App() {
     [buffers, activeBufferId],
   );
 
-  /** Switching workspace re-points the buffer you are in, rather than opening one. */
   const switchWorkspace = useCallback(
     (id: Uuid) => {
       if (!data[id]) void loadWorkspace(id);
@@ -371,9 +331,7 @@ export function App() {
     [here.blobViews],
   );
 
-  // Branches are open unless the reader closed them: a tree that starts fully
-  // shut is a list of one line, and tells a newcomer nothing about what is in
-  // the workspace.
+  // Branches start expanded.
   const expanded = useMemo(() => {
     const open = new Set(branchPaths(tree));
     for (const path of collapsed) open.delete(path);
@@ -422,11 +380,6 @@ export function App() {
     setRailCursor((at) => Math.min(at, Math.max(rail.length - 1, 0)));
   }, [rail.length]);
 
-  /**
-   * A rail row, opened. `newTab` is the reader asking for a second tab in so
-   * many words — a modifier-click, a middle-click, shift+Enter — rather than
-   * asking to move the tab they are in.
-   */
   const openRow = useCallback(
     (row: RailRow, newTab = false) => {
       if (!workspaceId) return;
@@ -447,7 +400,7 @@ export function App() {
     [workspaceId, goTo, openInNewBuffer],
   );
 
-  /** The open blob, re-read so the detail is the store's answer now. */
+  /** The open blob, re-fetched when selected. */
   const [openBlob, setOpenBlob] = useState<BlobView | null>(null);
   useEffect(() => {
     if (buffer?.selection.kind !== "blob" || !workspaceId) {
@@ -466,8 +419,7 @@ export function App() {
     };
   }, [buffer?.selection, workspaceId, report]);
 
-  // The last statement and its row count describe one table. Leaving that table
-  // makes them stale, and a stale reading is worse than no reading.
+  // Clear query stats when leaving a table.
   useEffect(() => {
     if (buffer?.selection.kind !== "table") {
       setLast(null);
@@ -483,7 +435,7 @@ export function App() {
         id: "new-workspace",
         kind: "cmd",
         label: ":new workspace",
-        hint: "create a workspace and switch this buffer to it",
+        hint: "create a workspace",
         run: () => setOverlay({ kind: "new-workspace" }),
       },
       {
@@ -494,117 +446,107 @@ export function App() {
         run: () =>
           rights.can("table.create")
             ? setOverlay({ kind: "new-table" })
-            : say("creating a table is the workspace owner's to do", true),
+            : say("requires owner", true),
       },
       {
         id: "upload",
         kind: "cmd",
         label: ":upload",
-        hint: "record a blob and send its bytes",
+        hint: "upload a file",
         run: () =>
           rights.can("blob.create")
             ? setOverlay({ kind: "upload" })
-            : say("recording a blob is the workspace owner's to do", true),
+            : say("requires owner", true),
       },
       {
         id: "add-column",
         kind: "cmd",
         label: ":add column",
-        hint: "alter the table in this buffer",
+        hint: "add a column to this table",
         run: () =>
           !rights.can("table.write")
-            ? say("altering a table takes an editor's rights", true)
+            ? say("requires editor", true)
             : tableActions.current
               ? tableActions.current.addColumn()
-              : say("open a table first — this alters the one you are looking at", true),
+              : say("open a table first", true),
       },
       {
         id: "insert-row",
         kind: "cmd",
         label: ":insert row",
-        hint: "put a row in the table in this buffer",
+        hint: "insert a row into this table",
         run: () =>
           !rights.can("table.write")
-            ? say("writing rows takes an editor's rights", true)
+            ? say("requires editor", true)
             : tableActions.current
               ? tableActions.current.insertRow()
-              : say("open a table first — this writes to the one you are looking at", true),
+              : say("open a table first", true),
       },
       {
         id: "find",
         kind: "cmd",
         label: ":find",
-        hint: "search this workspace's blob keys",
+        hint: "search blobs",
         run: () => findRef.current?.focus(),
       },
       {
         id: "new-tab",
         kind: "cmd",
         label: ":new tab",
-        hint: "a second tab on this same object, to navigate elsewhere",
-        run: () =>
-          buffer ? duplicateBuffer() : say("there is nothing open to open a second tab on", true),
+        hint: "duplicate this tab",
+        run: () => (buffer ? duplicateBuffer() : say("nothing open", true)),
       },
       {
         id: "close",
         kind: "cmd",
         label: ":close",
-        hint: "close this buffer",
+        hint: "close this tab",
         run: () =>
           buffers.length > 1 && activeBufferId
             ? closeBuffer(activeBufferId)
-            : say("this is the last buffer — something has to stay open", true),
+            : say("can't close the last tab", true),
       },
       {
         id: "grant",
         kind: "cmd",
         label: ":grant access",
-        hint: "give somebody a role in this workspace",
+        hint: "add a member",
         run: () =>
           rights.can("project.manage_members")
             ? setOverlay({ kind: "grant" })
-            : say("managing members takes an admin's rights", true),
+            : say("requires admin", true),
       },
       {
         id: "members",
         kind: "cmd",
         label: ":members",
-        hint: "who may reach this workspace, and how far",
+        hint: "workspace members",
         run: () =>
-          workspaceId
-            ? goTo(workspaceId, { kind: "members" })
-            : say("there is no workspace open to read the members of", true),
+          workspaceId ? goTo(workspaceId, { kind: "members" }) : say("no workspace open", true),
       },
       {
         id: "reload",
         kind: "cmd",
         label: ":reload",
-        hint: "read this workspace again",
+        hint: "reload this workspace",
         run: () => {
           void loadPlatform();
           if (workspaceId) void loadWorkspace(workspaceId);
-          say("reading the workspace again…");
+          say("reloading…");
         },
       },
       {
         id: "density",
         kind: "cmd",
         label: ":density",
-        hint: "switch between comfortable and compact",
+        hint: "toggle compact mode",
         run: () => setCompact((on) => !on),
-      },
-      {
-        id: "gloss",
-        kind: "cmd",
-        label: ":gloss",
-        hint: "show or hide the line explaining each panel",
-        run: () => setGloss((on) => !on),
       },
       {
         id: "signout",
         kind: "cmd",
-        label: ":forget key",
-        hint: "sign out and clear the key from this browser",
+        label: ":sign out",
+        hint: "sign out",
         run: signOut,
       },
     ];
@@ -624,7 +566,7 @@ export function App() {
           id: `t:${table.id}`,
           kind: "table",
           label: table.name,
-          hint: table.description ?? `table in ${table.datastore_name}`,
+          hint: table.description ?? table.datastore_name,
           run: () => goTo(workspaceId, { kind: "table", name: table.name }),
         });
       }
@@ -633,7 +575,7 @@ export function App() {
           id: `b:${view.blob.id}`,
           kind: "blob",
           label: view.blob.key,
-          hint: view.blob.description ?? (view.stored ? "blob" : "recorded, no bytes yet"),
+          hint: view.blob.description ?? (view.stored ? "blob" : "not uploaded"),
           run: () => goTo(workspaceId, { kind: "blob", key: view.blob.key }),
         });
       }
@@ -676,7 +618,7 @@ export function App() {
       commands.find((item) => item.kind !== "cmd" && item.label.toLowerCase() === typed);
 
     if (found) found.run();
-    else say(`no command answers to “${typed}” — press ⌘K to see what there is`, true);
+    else say(`unknown command: ${typed}`, true);
   }, [cmdValue, commands, buffers, say]);
 
   /* -- One keyboard dispatcher --------------------------------------------- */
@@ -728,7 +670,7 @@ export function App() {
         const item = rail[railCursor];
         if (item) {
           event.preventDefault();
-          // Shift is the keyboard's modifier-click: open it beside, don't move.
+          // Shift+Enter opens in a new tab.
           openRow(item, event.shiftKey);
         }
         return;
@@ -807,7 +749,6 @@ export function App() {
     <div
       className="vg-app"
       data-density={compact ? "compact" : "comfortable"}
-      data-gloss={gloss ? "on" : "off"}
     >
       <Tabline
         tabs={tabs}
@@ -832,8 +773,7 @@ export function App() {
         {!project || !buffer ? (
           <div style={{ paddingTop: 60, maxWidth: 720 }}>
             <Empty>
-              you are not a member of any workspace, and none has been created yet. a workspace is
-              the space objects belong to, so everything starts with one.
+              no workspaces yet
               <div style={{ marginTop: 16 }}>
                 <button className="vg-btn is-primary" onClick={() => setOverlay({ kind: "new-workspace" })}>
                   create a workspace
@@ -888,12 +828,12 @@ export function App() {
                     setOverlay({
                       kind: "confirm",
                       title: `Remove ${member.email}`,
-                      body: `Taking them out of ${project.name} ends their access to every table and blob in it at once. Nothing here is deleted, and they can be granted a role again — but until they are, this workspace is closed to them.`,
-                      verb: "remove from workspace",
+                      body: `They will lose access to ${project.name}.`,
+                      verb: "remove",
                       run: async () => {
                         await api.removeMembership(project.id, member.user_id);
                         await loadWorkspace(project.id);
-                        say(`${member.email} is out of this workspace`);
+                        say(`removed ${member.email}`);
                       },
                     })
                   }
@@ -904,7 +844,7 @@ export function App() {
                 (() => {
                   const name = (buffer.selection as { name: string }).name;
                   const table = (here.tables ?? []).find((item) => item.name === name);
-                  if (!table) return <Loading what="the table" />;
+                  if (!table) return <Loading />;
                   return (
                     <TablePane
                       key={`${project.id}/${table.name}`}
@@ -922,7 +862,7 @@ export function App() {
                       onDeleted={() => {
                         forgetSelection(project.id, { kind: "table", name: table.name });
                         void loadWorkspace(project.id);
-                        say(`${table.name} is gone, along with every row in it`);
+                        say(`deleted ${table.name}`);
                       }}
                       onAskDelete={(confirm) => setOverlay({ kind: "confirm", ...confirm })}
                     />
@@ -931,7 +871,7 @@ export function App() {
 
               {buffer.selection.kind === "blob" &&
                 (openBlob === null ? (
-                  <Loading what="the blob" />
+                  <Loading />
                 ) : (
                   <BlobPane
                     key={`${project.id}/${openBlob.blob.key}`}
@@ -941,11 +881,11 @@ export function App() {
                     onDeleted={() => {
                       forgetSelection(project.id, { kind: "blob", key: openBlob.blob.key });
                       void loadWorkspace(project.id);
-                      say("the blob and its bytes went together");
+                      say(`deleted ${openBlob.blob.key}`);
                     }}
                     onReplaced={() => {
                       void loadWorkspace(project.id);
-                      say("the new bytes are in the store");
+                      say("file replaced");
                     }}
                     onAskDelete={(confirm) => setOverlay({ kind: "confirm", ...confirm })}
                   />
@@ -987,7 +927,7 @@ export function App() {
             setOverlay(null);
             await loadPlatform();
             switchWorkspace(id);
-            say("workspace created — it is yours, and you own it");
+            say("workspace created");
           }}
         />
       )}
@@ -1000,7 +940,7 @@ export function App() {
             setOverlay(null);
             await loadWorkspace(project.id);
             goTo(project.id, { kind: "table", name });
-            say(`${name} is ready — insert a row to put something in it`);
+            say(`created ${name}`);
           }}
         />
       )}
@@ -1013,7 +953,7 @@ export function App() {
             setOverlay(null);
             await loadWorkspace(project.id);
             goTo(project.id, { kind: "blob", key });
-            say("the bytes are in the store");
+            say(`uploaded ${key}`);
           }}
         />
       )}

@@ -2,21 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 export interface PaletteItem {
   id: string;
-  /** `cmd` for something to do, anything else for somewhere to go. */
+  /** `cmd` for an action; anything else is an object to open. */
   kind: string;
   label: string;
   hint: string;
   run: () => void;
 }
 
-/**
- * The command palette.
- *
- * It and the command line read the same registry, so the two can never
- * disagree about what exists. Commands come first because they are what the
- * palette is for; objects follow, so that typing a table's name is also a way
- * of reaching it.
- */
+/** Command palette. Shares its command list with the command line. */
 export function Palette(props: { items: PaletteItem[]; onDismiss: () => void }) {
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
@@ -88,7 +81,7 @@ export function Palette(props: { items: PaletteItem[]; onDismiss: () => void }) 
         <div ref={listRef} style={{ maxHeight: "46vh", overflowY: "auto" }}>
           {ordered.length === 0 && (
             <div className="vg-palette-section" style={{ padding: "14px" }}>
-              nothing here answers to “{query}” — commands match on their name, objects on theirs
+              no matches
             </div>
           )}
           {commands.length > 0 && <div className="vg-palette-section">commands [{commands.length}]</div>}

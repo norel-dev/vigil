@@ -4,22 +4,13 @@ import { Empty, Fact, Head, Loading } from "./bits";
 import { ContactSheet } from "./ContactSheet";
 import { stamp } from "../lib/format";
 
-/**
- * The workspace, whole.
- *
- * This view answers what is in the workspace: the tables it owns and the
- * blobs it holds. Who may reach it is a separate question, asked by separate
- * people for separate reasons, and it is answered on its own page — the band
- * here only counts them, and leads there.
- */
+/** Workspace overview: tables and blobs. */
 export function WorkspacePane(props: {
   project: Project;
-  /** What the reader may do here, said in the platform's own words. */
   role: string;
   tables: Table[];
   blobViews: BlobView[] | null;
   members: Membership[] | null;
-  /** The policy as the console reads it, asked per act rather than once. */
   rights: Rights;
   onOpenTable: (name: string) => void;
   onOpenBlob: (key: string) => void;
@@ -38,14 +29,14 @@ export function WorkspacePane(props: {
             <span className="id">· {props.project.id}</span>
           </div>
           <h1 className="vg-title">{props.project.name}</h1>
-          <div className="vg-subtitle">
-            {props.project.description ?? "no description was given when this workspace was created"}
-          </div>
+          {props.project.description && (
+            <div className="vg-subtitle">{props.project.description}</div>
+          )}
         </div>
         <div className="vg-head-side">
           <div className="vg-row-flex">
             <span className="vg-chip">
-              <span className="k">you are</span>
+              <span className="k">role</span>
               {props.role}
             </span>
           </div>
@@ -69,28 +60,23 @@ export function WorkspacePane(props: {
       </header>
 
       <div className="vg-factband is-attached" style={{ marginTop: -18 }}>
-        <Fact label="tables" value={String(props.tables.length)} meta="structured data" />
+        <Fact label="tables" value={String(props.tables.length)} />
         <Fact
           label="blobs"
           value={props.blobViews ? String(props.blobViews.length) : "—"}
-          meta={props.blobViews ? `${filled} hold bytes` : "reading the store…"}
+          meta={props.blobViews ? `${filled} uploaded` : undefined}
         />
         <Fact
           label="members"
           value={props.members ? String(props.members.length) : "—"}
-          meta="people who may reach it"
           onOpen={props.onOpenMembers}
-          title="open the members page"
+          title="members"
         />
         <Fact label="created" value={stamp(props.project.creation_date)} meta="utc" />
       </div>
 
       <section>
-        <Head
-          title="Tables"
-          count={props.tables.length}
-          desc="structured data this workspace owns. the platform records the table; the rows live in the datastore holding it."
-        >
+        <Head title="Tables" count={props.tables.length}>
           <button
             className="vg-btn is-ghost"
             onClick={props.onNewTable}
@@ -100,10 +86,7 @@ export function WorkspacePane(props: {
           </button>
         </Head>
         {props.tables.length === 0 ? (
-          <Empty>
-            no tables in this workspace yet. creating one claims storage inside a datastore the whole
-            platform shares, so only the workspace owner may do it.
-          </Empty>
+          <Empty>no tables yet</Empty>
         ) : (
           <div className="vg-gridtable">
             <div className="vg-gridtable-head" style={{ gridTemplateColumns: "1.4fr 1fr 1fr auto" }}>
@@ -138,11 +121,7 @@ export function WorkspacePane(props: {
       </section>
 
       <section>
-        <Head
-          title="Blobs"
-          count={props.blobViews?.length}
-          desc="files this workspace owns. the record exists the moment you create it; the bytes arrive when something uploads through the signed url."
-        >
+        <Head title="Blobs" count={props.blobViews?.length}>
           <button
             className="vg-btn is-ghost"
             onClick={props.onNewBlob}
@@ -152,12 +131,9 @@ export function WorkspacePane(props: {
           </button>
         </Head>
         {props.blobViews === null ? (
-          <Loading what="the object store" />
+          <Loading />
         ) : props.blobViews.length === 0 ? (
-          <Empty>
-            nothing has been recorded here yet. uploading records the blob and hands back a url to
-            send the bytes to.
-          </Empty>
+          <Empty>no blobs yet</Empty>
         ) : (
           <ContactSheet
             project={props.project.id}

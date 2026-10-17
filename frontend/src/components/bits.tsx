@@ -1,16 +1,10 @@
 import type { ReactNode } from "react";
 
-/**
- * Section header — the most-used component in the system.
- *
- * The description is required, not optional: §9 of the design system says
- * every panel explains itself in one plain-English line. It is the only sans
- * in the header because it is the only sentence.
- */
+/** Section header. */
 export function Head(props: {
   title: string;
   count?: number;
-  desc: string;
+  desc?: string;
   note?: string;
   children?: ReactNode;
 }) {
@@ -18,7 +12,7 @@ export function Head(props: {
     <div className="vg-sect-head">
       <span className="vg-sect-title">{props.title}</span>
       {props.count !== undefined && <span className="vg-sect-count">[{props.count}]</span>}
-      <span className="vg-sect-desc">{props.desc}</span>
+      {props.desc && <span className="vg-sect-desc">{props.desc}</span>}
       <span className="vg-sect-fill" />
       {props.note && <span className="vg-sect-note">{props.note}</span>}
       {props.children && <span className="vg-sect-right">{props.children}</span>}
@@ -26,21 +20,19 @@ export function Head(props: {
   );
 }
 
-/** An empty state that names its cause. Never "no data". */
 export function Empty({ children }: { children: ReactNode }) {
   return <div className="vg-empty">{children}</div>;
 }
 
-/** Loading is a lowercase sentence in the empty box, not a spinner. */
-export function Loading({ what }: { what: string }) {
+export function Loading() {
   return (
     <div className="vg-empty" aria-busy="true">
-      reading {what}…
+      loading…
     </div>
   );
 }
 
-/** The platform's own words, in rust, inside a rust hairline. */
+
 export function Problem({ children }: { children: ReactNode }) {
   return (
     <div className="vg-error" role="alert">
@@ -53,7 +45,7 @@ export function Field(props: {
   label: string;
   gloss?: string;
   htmlFor?: string;
-  /** The label is a column name rather than a word, so it keeps its own case. */
+  /** Keep the label's case (e.g. a column name). */
   identifier?: boolean;
   children: ReactNode;
 }) {
@@ -71,14 +63,7 @@ export function Field(props: {
   );
 }
 
-/**
- * A statement, shown before it runs.
- *
- * This is the console's signature: no form changes a table without printing
- * the SQL it composed. The prompt marks it as a statement rather than a label,
- * and it is never editable here — the well above the results is where a reader
- * writes their own.
- */
+/** Read-only SQL preview. */
 export function Sketch({ statement, prompt = ":" }: { statement: string; prompt?: string }) {
   return (
     <div className="dp-sketch">
@@ -90,7 +75,7 @@ export function Sketch({ statement, prompt = ":" }: { statement: string; prompt?
   );
 }
 
-/** Key–value row: the value is right-aligned so values form a clean edge. */
+/** Key–value row. */
 export function KV({ k, children }: { k: string; children: ReactNode }) {
   return (
     <div className="vg-kv">
@@ -100,13 +85,7 @@ export function KV({ k, children }: { k: string; children: ReactNode }) {
   );
 }
 
-/**
- * One reading off the band under a title.
- *
- * A fact that stands for a place you can go says so by being pressable. It is
- * the same tile either way — the band keeps one rhythm whether or not a given
- * reading leads anywhere.
- */
+/** Stat tile; clickable when `onOpen` is given. */
 export function Fact({
   label,
   value,
@@ -117,7 +96,6 @@ export function Fact({
   label: string;
   value: ReactNode;
   meta?: string;
-  /** Where this reading leads, if it leads anywhere. */
   onOpen?: () => void;
   title?: string;
 }) {

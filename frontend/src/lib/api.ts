@@ -1,10 +1,4 @@
-/**
- * The API, as the console needs it.
- *
- * Everything goes through `/api`, which the dev server forwards to the
- * platform. The key travels as a bearer token on every request; nothing else
- * about the caller is sent.
- */
+/** API client. Requests go to `/api` with the key as a bearer token. */
 
 export type Uuid = string;
 export type ProjectRole = "viewer" | "editor" | "admin" | "owner";
@@ -49,11 +43,7 @@ export interface ColumnDefinition {
   name: string;
   type: string;
   nullable: boolean;
-  /**
-   * Whether the column is part of the table's primary key. Every column
-   * marked so forms one key together, in the order the columns were given,
-   * and none of them may be nullable — the platform refuses the pair.
-   */
+  /** Part of the (possibly composite) primary key. Must not be nullable. */
   primary_key: boolean;
 }
 
@@ -97,7 +87,7 @@ export interface CreatedBlob {
   upload: PresignedAccess;
 }
 
-/** An error the platform reported, carrying what it actually said. */
+/** An API error. `status` is 0 when the server couldn't be reached. */
 export class ApiError extends Error {
   readonly status: number;
 
@@ -108,7 +98,7 @@ export class ApiError extends Error {
   }
 }
 
-/** Turn FastAPI's two error shapes into one sentence. */
+/** Flatten FastAPI's error `detail` (string or validation list) into a message. */
 function readDetail(status: number, body: unknown): string {
   const detail = (body as { detail?: unknown } | null)?.detail;
   if (typeof detail === "string") return detail;
@@ -120,7 +110,7 @@ function readDetail(status: number, body: unknown): string {
       })
       .join(" · ");
   }
-  return `the platform answered ${status} and said nothing more`;
+  return `request failed (${status})`;
 }
 
 let key = "";
@@ -144,7 +134,7 @@ async function call<T>(
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
-    throw new ApiError(0, "the platform did not answer — check that the api is running on :8000");
+    throw new ApiError(0, "api unreachable");
   }
 
   if (response.status === 204) return undefined as T;
@@ -154,20 +144,15 @@ async function call<T>(
   try {
     if (text) parsed = JSON.parse(text) as unknown;
   } catch {
-    // The platform only ever answers json, so anything else is something else
-    // answering in its place — most often the dev server handing back
-    // index.html because the `/api` proxy is not in front of it.
-    throw new ApiError(
-      response.status,
-      "that answer was not json — the /api proxy is not in front of the platform. restart the dev server so it picks up vite.config.ts.",
-    );
+    // Usually means the /api proxy isn't configured and we got index.html.
+    throw new ApiError(response.status, "unexpected non-json response from /api");
   }
 
   if (!response.ok) throw new ApiError(response.status, readDetail(response.status, parsed));
   return parsed as T;
 }
 
-/** Blob keys carry slashes as part of the name, and the route reads them as one. */
+/** Encode a blob key for the URL, keeping its slashes. */
 function keyPath(key: string): string {
   return key.split("/").map(encodeURIComponent).join("/");
 }
@@ -182,13 +167,6 @@ export const api = {
     call<Membership[]>("GET", `/projects/${project}/members`),
   grantMembership: (project: Uuid, email: string, role: ProjectRole) =>
     call<Membership>("PUT", `/projects/${project}/members`, { email, role }),
-  /**
-   * Take somebody out of a workspace, ending their access to everything in it.
-   *
-   * This is the owner's to decide rather than every member manager's, and an
-   * owner cannot be the one taken out — the platform refuses that, so the
-   * console does not offer it.
-   */
   removeMembership: (project: Uuid, user: Uuid) =>
     call<void>("DELETE", `/projects/${project}/members/${user}`),
 
@@ -222,19 +200,15 @@ export const api = {
 };
 
 /**
- * Point a signed URL at the dev-server proxy.
- *
- * The signature was cut against `minio:9000`, a name only the compose network
- * resolves. The proxy sends the request to the store on localhost while still
- * addressing it as `minio:9000`, so the path and query — which carry the whole
- * signature — are kept exactly as they were handed over.
+ * Route a signed URL through the `/blob` proxy. The signature is for
+ * `minio:9000`, so path and query must be kept unchanged.
  */
 export function viaProxy(signed: string): string {
   const url = new URL(signed);
   return `/blob${url.pathname}${url.search}`;
 }
 
-/** Send the bytes. The signature covers one PUT of one key, and nothing else. */
+/** Upload a file to a signed URL. */
 export async function uploadTo(access: PresignedAccess, file: File): Promise<void> {
   const response = await fetch(viaProxy(access.url), {
     method: access.method,
@@ -245,8 +219,8 @@ export async function uploadTo(access: PresignedAccess, file: File): Promise<voi
     throw new ApiError(
       response.status,
       response.status === 403
-        ? "the upload url was refused — it is good for fifteen minutes, so ask for a new one"
-        : `the store refused the upload with ${response.status}`,
+        ? "upload url expired; try again"
+        : `upload failed (${response.status})`,
     );
   }
 }

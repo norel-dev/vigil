@@ -3,20 +3,8 @@ import type { Project } from "../lib/api";
 import { clock } from "../lib/format";
 
 /**
- * The shell: a fixed frame with exactly one scrolling region.
- *
- * A buffer here is an open object — a table, a blob, or a workspace's overview
- * — exactly as a buffer in an editor is an open file. Two buffers may belong to
- * two different workspaces at once, so which workspace a buffer is in is a
- * property of the buffer rather than of the window, and it is stated where the
- * rest of the window's state is stated: the statusline.
- *
- * A buffer is also a place the reader put themselves, in the way a browser tab
- * is. Picking an object out of the rail re-points the buffer in hand; it never
- * mints one and never sends the reader off to some other buffer that happens to
- * hold the same thing. A second buffer is only ever born by being asked for —
- * `+`, `:new tab`, a modifier-click — which is why two of them may show the
- * same object at once.
+ * App frame: tabline, statusline, command line and the scrolling canvas.
+ * Each tab ("buffer") holds one open object and remembers its own workspace.
  */
 
 export type Mode = "normal" | "command" | "busy";
@@ -25,7 +13,6 @@ export interface Tab {
   id: string;
   label: string;
   title: string;
-  /** Shown as the buffer's kind sigil, in the way vim shows a filetype. */
   kind: "workspace" | "members" | "table" | "blob";
   loading: boolean;
 }
@@ -49,7 +36,7 @@ export function Tabline(props: {
 }) {
   return (
     <header className="vg-tabline">
-      <button type="button" className="vg-brand" onClick={props.onNew} title="duplicate this buffer">
+      <button type="button" className="vg-brand" onClick={props.onNew} title="new tab">
         <img src="/mark.svg" alt="" width="14" height="14" />
         <span>dataplatform</span>
         <span className="vg-brand-version">v0.1</span>
@@ -66,7 +53,6 @@ export function Tabline(props: {
               aria-selected={active}
               onClick={() => props.onPick(tab.id)}
               onAuxClick={(event) => {
-                // Middle click closes, the way it closes a tab everywhere else.
                 if (event.button === 1) {
                   event.preventDefault();
                   props.onClose(tab.id);
@@ -99,7 +85,9 @@ export function Tabline(props: {
         <button
           className="vg-tab vg-tab-new"
           onClick={props.onNew}
-          title="duplicate this buffer, then take one of the two somewhere else" aria-label="duplicate this buffer">
+          title="new tab"
+          aria-label="new tab"
+        >
           +
         </button>
       </div>
@@ -109,7 +97,7 @@ export function Tabline(props: {
           <span className="vg-key">⌘K</span>
           <span>:cmd</span>
         </button>
-        <button className="vg-tool" onClick={props.onSignOut} title="forget this key">
+        <button className="vg-tool" onClick={props.onSignOut} title="sign out">
           <span className="dp-tool-who">{props.email}</span>
         </button>
       </div>
@@ -187,13 +175,7 @@ export function Cmdline(props: {
   );
 }
 
-/**
- * The workspace segment.
- *
- * Which workspace you are in is window state, not document state, so it lives
- * in the statusline rather than in a tab. It is a control: the popover it opens
- * is the whole of how a reader moves between workspaces with the mouse.
- */
+/** Statusline workspace switcher. */
 function WorkspaceSegment(props: {
   projects: Project[];
   activeId: string | null;
@@ -238,12 +220,10 @@ function WorkspaceSegment(props: {
 
       {open && (
         <div className="vg-popover dp-wspicker" role="menu" aria-label="workspaces">
-          <div className="vg-pick-title">workspaces you may reach</div>
+          <div className="vg-pick-title">workspaces</div>
           <div className="dp-wspicker-list">
             {props.projects.length === 0 ? (
-              <div className="vg-tree-empty">
-                you are not a member of any workspace, and none has been created yet.
-              </div>
+              <div className="vg-tree-empty">no workspaces</div>
             ) : (
               props.projects.map((project) => (
                 <button

@@ -1,26 +1,11 @@
-/**
- * Statement building.
- *
- * The console never runs a statement the reader has not been shown. Every
- * form that changes a table composes its SQL here and prints it back before
- * the button is pressed, because the platform does not parse the statement
- * either — the database engine refuses or accepts it, and a reader who never
- * saw the text cannot understand the refusal.
- */
+/** SQL builders for the table forms. */
 
-/** A bare SQL identifier, which is all the platform accepts for a table name. */
+/** A plain SQL identifier. */
 export function isIdentifier(value: string): boolean {
   return /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
 }
 
-/**
- * Render one typed value.
- *
- * An empty field means no value rather than an empty string: a blank cell in
- * a form is far more often "I have nothing for this" than "the text here is
- * zero characters long". Anything that reads as a number is written as one;
- * everything else is quoted, with quotes inside it doubled.
- */
+/** Form value to SQL literal: blank → NULL, numbers as-is, else quoted. */
 export function literal(value: string): string {
   const trimmed = value.trim();
   if (trimmed === "") return "NULL";
@@ -47,14 +32,7 @@ export function selectStatement(table: string, limit: number): string {
   return `SELECT * FROM ${table} LIMIT ${limit}`;
 }
 
-/**
- * Preview a table that does not exist yet.
- *
- * Creating a table is not a statement the caller writes — the platform builds
- * it, and generates the name the datastore will really hold it under. This is
- * shown so the shape being asked for is legible, and is labelled as a sketch
- * rather than as the statement that will run.
- */
+/** Approximate CREATE TABLE preview; the server generates the real statement. */
 export function createTableSketch(
   name: string,
   columns: { name: string; type: string; nullable: boolean; primary_key: boolean }[],
@@ -65,9 +43,7 @@ export function createTableSketch(
     return `  ${label} ${type}${column.nullable ? "" : " NOT NULL"}`;
   });
 
-  // A key of one column is written the same way as a key of several, because
-  // that is the one form the platform emits for both. Writing PRIMARY KEY
-  // against a lone column here would print a shape the reader will not get.
+  // Always a table-level PRIMARY KEY clause, matching what the server emits.
   const key = columns.filter((column) => column.primary_key).map((column) => column.name || "«name»");
   if (key.length > 0) lines.push(`  PRIMARY KEY (${key.join(", ")})`);
 
@@ -75,13 +51,13 @@ export function createTableSketch(
   return `CREATE TABLE ${name || "«name»"} (\n${body || "  «no columns yet»"}\n)`;
 }
 
-/** What a statement is going to do, in one lowercase word, for the statusline. */
+/** First keyword of a statement, lowercased. */
 export function verbOf(statement: string): string {
   const first = statement.trim().split(/\s+/)[0] ?? "";
   return first.toLowerCase() || "—";
 }
 
-/** Whether a statement returns rows, so an empty result can be explained. */
+/** Whether a statement returns rows. */
 export function isRead(statement: string): boolean {
   return /^\s*(select|with|values)\b/i.test(statement);
 }

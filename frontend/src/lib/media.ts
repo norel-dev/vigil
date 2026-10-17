@@ -1,13 +1,6 @@
 import { api, viaProxy, type Uuid } from "./api";
 
-/**
- * Signed download URLs, cached until shortly before they lapse.
- *
- * A signature is the whole of the authorization, so it is deliberately
- * short-lived. The console holds one per blob and asks for a fresh one a
- * minute before the old one stops working, rather than signing again for
- * every render.
- */
+/** Signed download URLs, cached until a minute before they expire. */
 const held = new Map<string, { url: string; expires: number }>();
 
 const MARGIN_MS = 60_000;

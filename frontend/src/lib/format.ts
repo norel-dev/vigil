@@ -1,4 +1,4 @@
-/** Formatting shared across surfaces. Nothing here knows about the API. */
+/** Display formatting helpers. */
 
 export function bytes(size: number): string {
   if (size < 1024) return `${size} B`;
@@ -12,7 +12,7 @@ export function bytes(size: number): string {
   return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
 }
 
-/** Latency comes back in seconds and is almost always sub-millisecond. */
+/** Seconds to a millisecond string. */
 export function latency(seconds: number): string {
   const ms = seconds * 1000;
   if (ms < 1) return `${ms.toFixed(2)}ms`;
@@ -37,13 +37,7 @@ export function clock(date: Date): string {
   )} UTC`;
 }
 
-/**
- * Seconds as a running time.
- *
- * The hour field appears only when there is one, so a three-minute recording
- * reads 3:07 rather than 0:03:07 — but every field below the largest is
- * padded, because a transport whose digits change width jitters as it plays.
- */
+/** Seconds as m:ss, or h:mm:ss when over an hour. */
 export function timecode(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "--:--";
   const whole = Math.floor(seconds);
@@ -54,5 +48,5 @@ export function timecode(seconds: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
-/** How many rows fit on one screen of the result grid without paging. */
+/** Default row limit for the table query. */
 export const ROW_LIMIT = 200;

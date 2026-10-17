@@ -1,10 +1,6 @@
 import type { Viewer } from "./viewer";
 import { Frame } from "./Frame";
 
-/**
- * A picture. The only format the console has always been able to show, and
- * still the only one that needs no controls: it is all there at once.
- */
 export const image: Viewer = {
   kind: "image",
   types: ["image/"],

@@ -1,28 +1,19 @@
-/**
- * Keys that look like paths, read as one.
- *
- * A blob's key is one string: the slashes in it are part of the name, and the
- * store has no folders to create. But people write keys that way because they
- * think in folders, so the console reads the separators back out and shows the
- * hierarchy they imply. Nothing here exists in the store — a branch is a
- * consequence of how the leaves beneath it were named, and disappears when the
- * last of them does.
- */
+/** Builds a folder tree from slash-separated blob keys (folders are display-only). */
 
 export interface Branch<T> {
   kind: "branch";
-  /** Everything up to and including this segment, e.g. `survey/day1`. */
+  /** e.g. `survey/day1`. */
   path: string;
   name: string;
   depth: number;
   children: Node<T>[];
-  /** How many leaves hang below, at any depth. */
+  /** Leaf count at any depth. */
   count: number;
 }
 
 export interface Leaf<T> {
   kind: "leaf";
-  /** The whole key, which is the object's real name. */
+  /** The full key. */
   path: string;
   name: string;
   depth: number;
@@ -40,7 +31,7 @@ function draft<T>(): Draft<T> {
   return { branches: new Map(), leaves: [] };
 }
 
-/** Build the hierarchy a set of keys implies. Order is branches, then leaves, each by name. */
+/** Build the tree. Branches first, then leaves, each sorted by name. */
 export function build<T>(items: { key: string; item: T }[]): Node<T>[] {
   const root = draft<T>();
 
@@ -95,12 +86,8 @@ export function build<T>(items: { key: string; item: T }[]): Node<T>[] {
 }
 
 /**
- * The rows a reader can actually see.
- *
- * With no query, a branch shows its children only when it is expanded. With
- * one, only leaves whose whole key matches survive, every branch above a
- * surviving leaf comes with it, and expansion is ignored — a filtered tree that
- * hid its own matches behind a collapsed branch would be worse than a list.
+ * Visible rows. Without a query, respects expansion; with one, shows matching
+ * leaves and their parent branches regardless of expansion.
  */
 export function flatten<T>(
   nodes: Node<T>[],
@@ -139,7 +126,7 @@ function keptUnder<T>(branch: Branch<T>, needle: string): Node<T>[] {
   return kept;
 }
 
-/** Every branch path in the tree, for expanding it all at once. */
+/** All branch paths in the tree. */
 export function branchPaths<T>(nodes: Node<T>[]): string[] {
   const paths: string[] = [];
   const walk = (list: Node<T>[]) => {
@@ -154,7 +141,7 @@ export function branchPaths<T>(nodes: Node<T>[]): string[] {
   return paths;
 }
 
-/** Every branch above a key, so opening a blob reveals where it lives. */
+/** Branch paths above a key. */
 export function ancestors(key: string): string[] {
   const segments = key.split("/").filter((segment) => segment !== "");
   return segments.slice(0, -1).map((_, index) => segments.slice(0, index + 1).join("/"));
@@ -166,11 +153,8 @@ export interface Run {
 }
 
 /**
- * Split a node's last segment into matched and unmatched runs.
- *
- * The query is matched against the whole path rather than the segment, so a
- * search for `day1/ket` highlights the part of each segment that it covers
- * instead of matching nothing at all.
+ * Split a node's name into matched/unmatched runs for highlighting.
+ * Matches against the full path, so `day1/ket` highlights across segments.
  */
 export function runs(path: string, name: string, query: string): Run[] {
   const needle = query.trim().toLowerCase();

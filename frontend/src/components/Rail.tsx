@@ -4,13 +4,7 @@ import type { Node } from "../lib/tree";
 import { runs } from "../lib/tree";
 import type { Rights } from "../lib/authz";
 
-/**
- * One navigable row in the rail, whatever kind of thing it stands for.
- *
- * The rail is one list, so `j` and `k` walk it as one list — across the
- * workspace's own pages, the tables and every level of the blob tree without
- * the reader having to think about where one section ends.
- */
+/** One row in the sidebar. `j`/`k` walk all rows as a single list. */
 export type RailRow =
   | { id: "overview"; kind: "overview" }
   | { id: "members"; kind: "members" }
@@ -51,16 +45,10 @@ export function railRows(
   return rows;
 }
 
-/**
- * The workspace's own pages, as opposed to the things kept inside it.
- *
- * The group that draws them asks this rather than taking the rows off the
- * front of the list, so adding a page is adding it to `railRows` and nothing
- * else has to know how many there now are.
- */
+/** Workspace pages, as opposed to tables and blobs. */
 const isPage = (row: RailRow) => row.kind === "overview" || row.kind === "members";
 
-/** Matched runs, so a reader can see which part of a name answered the query. */
+/** Name with search matches highlighted. */
 function Name({ path, name, query }: { path: string; name: string; query: string }) {
   return (
     <span className="vg-tree-name" title={path}>
@@ -81,7 +69,6 @@ export function Rail(props: {
   rows: RailRow[];
   cursor: number;
   openId: string;
-  /** The policy as the console reads it, asked per act rather than once. */
   rights: Rights;
   tableCount: number;
   blobTotal: number;
@@ -89,7 +76,6 @@ export function Rail(props: {
   query: string;
   expanded: ReadonlySet<string>;
   onQuery: (value: string) => void;
-  /** `newTab` when the reader asked for a tab of its own, browser-fashion. */
   onOpen: (row: RailRow, newTab: boolean) => void;
   onNewTable: () => void;
   onNewBlob: () => void;
@@ -125,17 +111,11 @@ export function Rail(props: {
         aria-expanded={item.kind === "branch" ? props.expanded.has(item.path) : undefined}
         onClick={(event) => props.onOpen(item, event.metaKey || event.ctrlKey)}
         onAuxClick={(event) => {
-          // Middle click opens beside, the way it opens a link everywhere else.
           if (event.button === 1) {
             event.preventDefault();
             props.onOpen(item, true);
           }
         }}
-        title={
-          isPage(item) || item.kind === "table"
-            ? "⌘-click or middle-click for a new tab"
-            : undefined
-        }
       >
         <span className="vg-tree-rail" style={{ width: depth * 12 }} aria-hidden="true" />
         <span className="vg-tree-caret" aria-hidden="true">
@@ -218,8 +198,8 @@ export function Rail(props: {
             className="vg-find-input"
             value={props.query}
             spellCheck={false}
-            aria-label="find a blob by key"
-            placeholder="find a key…"
+            aria-label="search blobs"
+            placeholder="search…"
             onChange={(event) => props.onQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
@@ -233,7 +213,7 @@ export function Rail(props: {
             <button
               type="button"
               className="vg-find-clear"
-              aria-label="clear the search"
+              aria-label="clear search"
               onClick={() => props.onQuery("")}
             >
               ×
@@ -243,11 +223,9 @@ export function Rail(props: {
 
         <div className="vg-tree">
           {props.blobTotal === 0 ? (
-            <div className="vg-tree-empty">nothing has been recorded here yet</div>
+            <div className="vg-tree-empty">none yet</div>
           ) : blobs.length === 0 ? (
-            <div className="vg-tree-empty">
-              no key holds “{props.query.trim()}”. the search reads the whole key, slashes included.
-            </div>
+            <div className="vg-tree-empty">no matches</div>
           ) : (
             blobs.map((item) => row(item, props.rows.indexOf(item)))
           )}

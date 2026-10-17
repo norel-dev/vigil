@@ -4,14 +4,7 @@ import { Undecodable } from "./Frame";
 import { Transport, useTransport } from "./Transport";
 import { bytes } from "../lib/format";
 
-/**
- * A recording.
- *
- * Audio is the one format that is entirely transport: there is nothing to look
- * at, so the controls are not an overlay on the thing but the whole of it. It
- * gets its own frame rather than the shared stage for that reason — a picture
- * frame around a strip of controls sits a recording inside an empty gallery.
- */
+/** Audio player. */
 function Deck({ url, stored, blob }: ViewerProps) {
   const ref = useRef<HTMLAudioElement | null>(null);
   const playback = useTransport(ref);
@@ -23,7 +16,7 @@ function Deck({ url, stored, blob }: ViewerProps) {
         <div className="dp-deck-name">
           <span className="dp-deck-key">{blob.key.split("/").pop()}</span>
           <span className="dp-deck-meta">
-            {stored.content_type ?? "type unstated"} · {bytes(stored.size)}
+            {stored.content_type ?? "unknown type"} · {bytes(stored.size)}
           </span>
         </div>
         {playback.failed ? (

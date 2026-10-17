@@ -1,13 +1,7 @@
 import { useState } from "react";
 import { Field, Problem } from "./bits";
 
-/**
- * The way in.
- *
- * The platform authenticates one way — an API key it issued — so this screen
- * asks for exactly that and explains where one comes from. It is the whole of
- * the first impression: the ground, the mark, and a prompt.
- */
+/** API key sign-in screen. */
 export function Gate(props: {
   onSubmit: (key: string) => void;
   pending: boolean;
@@ -36,18 +30,14 @@ export function Gate(props: {
                 if (key.trim()) props.onSubmit(key.trim());
               }}
             >
-              <Field
-                label="api key"
-                htmlFor="dp-key"
-                gloss="Every request carries this key, and the policy decides what it may do from the roles it carries. Keys are shown once, when they are issued."
-              >
+              <Field label="api key" htmlFor="dp-key">
                 <input
                   id="dp-key"
                   className="vg-input is-lg"
                   type="password"
                   autoComplete="off"
                   spellCheck={false}
-                  placeholder="paste the key you were issued…"
+                  placeholder="dpk_…"
                   value={key}
                   onChange={(event) => setKey(event.target.value)}
                 />
@@ -70,9 +60,7 @@ export function Gate(props: {
         </div>
 
         <div className="vg-note" style={{ marginTop: 14 }}>
-          Running the compose stack locally? The bootstrap administrator's key is
-          <code className="dp-inline-code"> BOOTSTRAP_API_KEY</code>, by default
-          <code className="dp-inline-code"> dpk_local_docker_compose_development_key</code>.
+          Local dev key: <code className="dp-inline-code">BOOTSTRAP_API_KEY</code>
         </div>
       </div>
     </div>

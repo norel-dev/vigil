@@ -1,17 +1,7 @@
-/* =============================================================================
-   dataplatform console — application layer
-
-   tokens.css and components.css are the design system, vendored unmodified.
-   This file is the console's own composition: it names no colour, size or
-   duration of its own, and only resolves tokens, exactly as components.css
-   does. Everything here is prefixed `dp-`.
-   ============================================================================= */
+/* ── dataplatform console — application layer ── */
 
 :root {
-  /* The one correction the handoff asks for rather than reproduces:
-     #5A5852 measures ≈2.8:1 on the ground and carries most of the metadata in
-     the system. #7C7A74 reaches 4.5:1 and stays clearly recessive against
-     --vg-fg-secondary. See §13 of VIGIL-DESIGN-SYSTEM.md. */
+  /* Raise muted text contrast (#5A5852 was ≈2.8:1). */
   --vg-fg-muted: #7C7A74;
 }
 
@@ -22,8 +12,7 @@ body { margin: 0; overflow: hidden; }
 /* The first screen: the dot grid, the mark, and a prompt. Nothing else. */
 
 .dp-gate {
-  /* Mono is the default voice of the interface, and this screen sits outside
-     the shell that normally establishes it. */
+  /* Sign-in screen sits outside the shell, so set mono here. */
   font-family: var(--vg-font-mono);
   height: 100vh;
   display: grid;
@@ -58,9 +47,7 @@ body { margin: 0; overflow: hidden; }
 .dp-pick-row .dp-pick-tail { margin-left: auto; flex-shrink: 0; }
 
 /* -- Forms ------------------------------------------------------------------ */
-/* A field is a tracked micro label over a control, with an optional gloss line
-   beneath it. The gloss is the only sans in a form, because it is the only
-   sentence. */
+/* Form field: label, control, optional help text. */
 
 .dp-form { display: flex; flex-direction: column; gap: var(--vg-s-4); }
 .dp-field { display: flex; flex-direction: column; gap: var(--vg-s-1); min-width: 0; }
@@ -89,8 +76,7 @@ body { margin: 0; overflow: hidden; }
 }
 .dp-form-actions .vg-spacer { flex: 1; }
 
-/* Selects have to be styled from scratch: left alone, the user agent paints a
-   rounded light-mode control in the middle of a dark sharp-cornered system. */
+/* Custom select styling. */
 .dp-select {
   appearance: none;
   width: 100%;
@@ -125,11 +111,7 @@ body { margin: 0; overflow: hidden; }
 .dp-col-row:last-child { border-bottom: 0; }
 .dp-col-n { font-family: var(--vg-font-mono); font-size: 10px; color: var(--vg-fg-muted); text-align: right; }
 
-/* A key column must hold a value, so its NOT NULL is a consequence rather than
-   a question. It is stated where the toggle would have been, and reads as lit
-   as the toggle it replaces — a control dimmed by `:disabled` would say the
-   opposite of what is true, that the column is least certainly not-null
-   exactly when it is most certainly so. */
+/* Fixed NOT NULL tag for key columns. */
 .dp-col-fact {
   align-self: center;
   border-color: var(--vg-interactive);
@@ -139,8 +121,7 @@ body { margin: 0; overflow: hidden; }
 }
 
 /* -- The statement well ----------------------------------------------------- */
-/* The console's one loud idea: the statement is never hidden. It is composed
-   here, shown before it runs, and the engine's own words come back below it. */
+/* SQL editor. */
 
 .dp-well { border: 1px solid var(--vg-border-strong); background: var(--vg-surface-sunken); }
 .dp-well-head {
@@ -185,8 +166,7 @@ body { margin: 0; overflow: hidden; }
   color: var(--vg-fg-muted);
 }
 
-/* A statement shown before it runs. Read-only, and marked as such by the
-   prompt rather than by a disabled control. */
+/* SQL preview. */
 .dp-sketch {
   display: flex;
   gap: var(--vg-s-2);
@@ -224,13 +204,11 @@ body { margin: 0; overflow: hidden; }
   object-fit: contain;
 }
 
-/* A page is its own document and draws to its own edge, so the stage stops
-   framing it and gets out of the way. */
+/* Unframed stage for pdfs. */
 .dp-media-stage.is-bare {
   padding: 0;
   min-height: 0;
-  /* The cap belongs to the framed stage. A player caps its own picture and
-     then adds a transport below it, so a cap here would crop the controls. */
+  /* Max height only on framed stages. */
   max-height: none;
   background-image: none;
 }
@@ -243,10 +221,7 @@ body { margin: 0; overflow: hidden; }
 }
 
 /* -- The transport ---------------------------------------------------------- */
-/* Built rather than borrowed: `controls` draws the browser's own chrome, which
-   is a different shape and weight in every browser and matches none of them
-   here. The seek bar stays a range input underneath the paint, so arrow keys,
-   Home, End and the screen reader's idea of a slider all still work. */
+/* Custom media controls. */
 
 .dp-transport {
   display: flex;
@@ -276,8 +251,7 @@ body { margin: 0; overflow: hidden; }
 .dp-transport-key.is-quiet { border-color: transparent; }
 .dp-transport-key.is-quiet:hover { border-color: var(--vg-border-strong); }
 
-/* Tabular numerals and a fixed width: a clock whose digits change width makes
-   the whole bar shuffle sideways once a second. */
+/* Fixed-width digits so the bar doesn't shift. */
 .dp-transport-time {
   flex-shrink: 0;
   font-family: var(--vg-font-mono);
@@ -297,9 +271,7 @@ body { margin: 0; overflow: hidden; }
 }
 .dp-transport-bar input[type="range"]:disabled { cursor: not-allowed; opacity: 0.5; }
 
-/* Three layers on one track: played, fetched-but-unplayed, and not yet here.
-   The middle one is why the bar is worth drawing at all — it is the only place
-   the console says whether a stall is the network or the file. */
+/* Track layers: played, buffered, remaining. */
 .dp-transport-bar input[type="range"]::-webkit-slider-runnable-track {
   height: 3px;
   border-radius: var(--vg-radius-1);
@@ -337,8 +309,7 @@ body { margin: 0; overflow: hidden; }
 }
 
 /* -- The player and the deck ------------------------------------------------ */
-/* Video is a picture with a transport under it; audio is the transport alone.
-   The deck is not a picture frame around nothing for that reason. */
+/* Audio player. */
 
 .dp-player { display: flex; flex-direction: column; width: 100%; min-width: 0; }
 .dp-player video {
@@ -375,9 +346,7 @@ body { margin: 0; overflow: hidden; }
 .dp-deck .vg-withheld { margin: 0 var(--vg-s-3) var(--vg-s-3) var(--vg-s-3); }
 
 /* -- Printed source --------------------------------------------------------- */
-/* Html arrives here rather than in a frame: a blob is bytes someone uploaded,
-   and this page holds an api key. Showing the file is the honest answer and
-   usually the useful one. */
+/* Source viewer. */
 
 .dp-source { border: 1px solid var(--vg-border); background: var(--vg-surface-sunken); }
 .dp-source-bar {
@@ -419,14 +388,11 @@ body { margin: 0; overflow: hidden; }
   color: var(--vg-fg-secondary);
   tab-size: 2;
 }
-/* Wrapping is the default: minified markup is one line, and a reader who is
-   handed it unwrapped gets a single line several megabytes wide. */
+/* Wrap by default. */
 .dp-source-body.is-wrapped { white-space: pre-wrap; word-break: break-word; }
 
 /* The contact sheet: every blob in the workspace at a glance. */
-/* Hairlines are drawn by the shots themselves rather than by a painted gap:
-   a gap-coloured background fills the empty tracks of the last row too, and
-   reads as a large blank panel rather than as nothing being there. */
+/* Thumbnails draw their own borders so empty grid cells stay blank. */
 .dp-sheet {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
@@ -474,8 +440,7 @@ body { margin: 0; overflow: hidden; }
   text-align: center;
   line-height: 1.5;
 }
-/* Recorded, never filled — the state the API models explicitly. Dashed, per
-   §9: solid means empty, dashed means deliberately not there. */
+/* Blob with no uploaded bytes. */
 .dp-shot-stage.is-hollow { border-bottom: 1px dashed var(--vg-border-strong); }
 .dp-shot-caption { display: block; padding: var(--vg-s-2) var(--vg-s-3) 9px var(--vg-s-3); min-width: 0; overflow: hidden; }
 .dp-shot-key {
@@ -526,8 +491,7 @@ body { margin: 0; overflow: hidden; }
   font-family: var(--vg-font-mono);
   font-size: 11px;
   color: var(--vg-fg-secondary);
-  /* Break between words, never inside one: a path split mid-token reads as a
-     rendering fault rather than as a wrap. */
+  /* Break between words only. */
   overflow-wrap: break-word;
   word-break: normal;
 }
@@ -535,8 +499,7 @@ body { margin: 0; overflow: hidden; }
 .dp-cell-null { color: var(--vg-fg-muted); font-style: italic; }
 .dp-toast-slot { position: fixed; inset: auto 0 52px 0; display: flex; justify-content: center; pointer-events: none; }
 
-/* Reduced motion: the system's whole inventory of movement is colour fades,
-   a blink and a pulse. Blinking and pulsing are the ones worth stopping. */
+/* Reduced motion. */
 @media (prefers-reduced-motion: reduce) {
   .vg-cmdline-cursor,
   .vg-palette-cursor,
@@ -553,11 +516,7 @@ body { margin: 0; overflow: hidden; }
 .vg-pick { min-width: 0; }
 
 /* -- Identifiers keep their own case ---------------------------------------- */
-/* tokens.css gives `.vg-label` tracked caps and components.css redefines it as
-   a small bordered chip without resetting that, so the tracked caps survive.
-   Column names are identifiers a reader will type back into a statement, and
-   must render exactly as the engine reports them — including their case. The
-   same applies to a field labelled after a column. */
+/* Reset tracked caps inherited from tokens.css. */
 
 .vg-labels .vg-label,
 .dp-field-label.is-identifier,
@@ -568,10 +527,7 @@ body { margin: 0; overflow: hidden; }
 .dp-field-label.is-identifier { font-size: 10.5px; }
 
 /* -- Reflow, not redesign --------------------------------------------------- */
-/* The design system's own breakpoints handle the two-ups and the rail. These
-   are the two places the console's own chrome would otherwise overflow: a page
-   header whose action cluster is wider than the column it sits in, and a
-   command line whose keycap hints have nowhere to go. */
+/* Responsive. */
 
 @media (max-width: 900px) {
   .vg-head { grid-template-columns: minmax(0, 1fr); }
@@ -581,12 +537,7 @@ body { margin: 0; overflow: hidden; }
 }
 
 /* -- The shell must not be wider than the window ---------------------------- */
-/* `.vg-app` is a single-column grid, and an implicit `auto` column is sized by
-   the min-content of its widest row. A tabline holding several workspaces
-   therefore sets a floor the viewport cannot fall below, and the right end of
-   the statusline is clipped off the screen rather than reflowing. Pin the
-   column to the viewport and let each row shrink inside it; the tabs already
-   scroll on their own. */
+/* Keep the grid column from growing to its widest row. */
 
 .vg-app { grid-template-columns: minmax(0, 1fr); }
 .vg-tabline,
@@ -594,8 +545,7 @@ body { margin: 0; overflow: hidden; }
 .vg-cmdline,
 .vg-statusline { min-width: 0; }
 
-/* The context segment names the whole path to what is open, so it is the one
-   segment that can be arbitrarily long. It gives way first. */
+/* Context segment can be long; let it truncate. */
 .dp-seg-context { min-width: 0; }
 .dp-seg-context > span {
   overflow: hidden;
@@ -610,18 +560,14 @@ body { margin: 0; overflow: hidden; }
 }
 
 /* -- Buffers ---------------------------------------------------------------- */
-/* A tab is an open object, so it says which kind of object before it says the
-   name. The sigil is a glyph rather than a word because the tabline is the one
-   row in the shell with no space to spare. */
+/* Tab kind icon. */
 
 .dp-tab-sigil { color: var(--vg-fg-muted); font-size: 9px; flex-shrink: 0; }
 .vg-tab.is-active .dp-tab-sigil { color: var(--vg-interactive); }
 .dp-tab-name { max-width: 20ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* -- The workspace segment -------------------------------------------------- */
-/* Which workspace you are in is window state rather than document state, so it
-   sits in the statusline. Its picker is the one popover in the console that
-   opens upward, because there is nothing below it to open into. */
+/* Statusline workspace switcher. */
 
 .dp-seg-host { position: relative; display: flex; }
 .dp-seg-ws { color: var(--vg-fg-primary); }
@@ -644,10 +590,7 @@ body { margin: 0; overflow: hidden; }
 }
 
 /* -- A fact that leads somewhere -------------------------------------------- */
-/* Most readings in a band are readings and nothing more. One that stands for a
-   place the reader can go says so by being pressable — the tile is otherwise
-   unchanged, so the band keeps one rhythm whether or not a given reading
-   leads anywhere. */
+/* Clickable stat tile. */
 
 .dp-fact-link {
   display: block;

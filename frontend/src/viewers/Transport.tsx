@@ -9,18 +9,8 @@ import {
 import { timecode } from "../lib/format";
 
 /**
- * The transport: play, seek, and the running time.
- *
- * Audio and video are the same problem wearing different clothes — one has a
- * picture and one does not, but both are a position in a duration — so both
- * drive this. It is built rather than borrowed because `controls` draws the
- * browser's chrome, which is a different shape, weight and colour in every
- * browser and belongs to none of them here.
- *
- * The seek bar is a range input and not a styled div. A div would need its own
- * arrow keys, its own Home and End, its own focus ring and its own
- * `role="slider"` with the value mirrored into ARIA by hand; the input has all
- * of that already and is the same control a screen reader has met before.
+ * Custom play/seek controls shared by audio and video, so they look the same
+ * in every browser. The seek bar is a native range input for accessibility.
  */
 
 export interface Playback {
@@ -28,10 +18,10 @@ export interface Playback {
   playing: boolean;
   current: number;
   duration: number;
-  /** How far the browser has fetched ahead of the playhead, in seconds. */
+  /** Seconds buffered. */
   buffered: number;
   muted: boolean;
-  /** Set when the browser will not decode these bytes at all. */
+  /** The browser can't decode the media. */
   failed: boolean;
 }
 
@@ -53,9 +43,7 @@ export function useTransport(ref: RefObject<HTMLMediaElement | null>) {
     if (!element) return;
 
     const read = () => {
-      // A live or still-unparsed stream reports its length as Infinity or NaN.
-      // Both mean the same thing to a reader — nobody knows yet — and both are
-      // carried through as-is so the bar can disable itself rather than lie.
+      // Duration may be NaN or Infinity until known; the seek bar disables itself.
       const duration = element.duration;
       let buffered = 0;
       for (let i = 0; i < element.buffered.length; i += 1) {
@@ -99,15 +87,12 @@ export function useTransport(ref: RefObject<HTMLMediaElement | null>) {
       for (const name of events) element.removeEventListener(name, read);
       element.removeEventListener("error", fail);
     };
-    // Keyed on the ref alone: effects run after mount, so the element is always
-    // there by now, and it outlives any change of source.
   }, [ref]);
 
   const toggle = useCallback(() => {
     const element = ref.current;
     if (!element) return;
-    // `play()` rejects when autoplay policy or a decode failure blocks it. That
-    // is a refusal rather than a crash, so it is caught and shown as one.
+    // `play()` rejects on autoplay policy or decode failure.
     if (element.paused) void element.play().catch(() => setState((p) => ({ ...p, failed: true })));
     else element.pause();
   }, [ref]);
@@ -130,7 +115,7 @@ export function useTransport(ref: RefObject<HTMLMediaElement | null>) {
 
 export function Transport(props: {
   playback: ReturnType<typeof useTransport>;
-  /** Named in the seek bar's label, so a page of them is not a page of "seek". */
+  /** Used in the seek bar's aria-label. */
   label: string;
   children?: ReactNode;
 }) {
