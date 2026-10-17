@@ -1,35 +1,51 @@
-# The console, as the compose file runs it: Vite's dev server, on Bun.
+# The console, built and served on Bun.
 #
-# The image carries the dependencies and the source; the compose file mounts
-# the source over it read-only so that editing a file on the host hot-reloads
-# the page. The dependencies live one directory above the project, in
-# /srv/node_modules, so that mount does not hide them: module resolution walks
-# up from /srv/app and finds them there. Vite's own cache goes in that same
-# directory, which is what lets the source mount be read-only.
+# The first stage type-checks and bundles the source; the second carries only
+# the bundle and server/, which needs nothing but Bun itself, on a distroless
+# base with no shell, no package manager and no root.
 #
-# There is no Node in this image, so Vite runs on Bun's runtime. The one place
-# that matters is the /blob proxy and its Host header: if large uploads through
-# the console fail with SignatureDoesNotMatch, this is the first suspect.
+#   docker build -t vigil-frontend frontend/
+#   docker run -p 8080:8080 \
+#     -e API_PROXY_TARGET=http://backend:8000 \
+#     -e BLOB_PROXY_TARGET=http://minio:9000 \
+#     vigil-frontend
+#
+# BLOB_SIGNED_HOST must be the host the API signs object URLs for (minio:9000
+# by default); see server/routes.ts.
 
-FROM oven/bun:1.4.2-slim
+FROM oven/bun:1.4.2-slim AS build
 
-WORKDIR /srv
+WORKDIR /app
 
 # Dependencies first, so that changing the source does not reinstall them.
-# There is no bun.lock yet; bun install reads the versions out of
-# package-lock.json instead, so the image gets what npm would have installed.
+# There is no bun.lock; bun reads the versions out of package-lock.json, and
+# --frozen-lockfile fails the build rather than resolve anything newer.
 COPY package.json package-lock.json ./
-RUN bun install
+RUN bun install --frozen-lockfile
 
-WORKDIR /srv/app
 COPY . .
+RUN bun --bun run build
 
-ENV PATH=/srv/node_modules/.bin:$PATH \
-    VITE_CACHE_DIR=/srv/node_modules/.vite
 
-EXPOSE 5173
+FROM oven/bun:1.4.2-distroless
 
-HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=5 \
-    CMD ["bun", "-e", "const r = await fetch('http://localhost:5173/'); process.exit(r.ok ? 0 : 1)"]
+WORKDIR /app
 
-CMD ["vite", "--host", "0.0.0.0", "--port", "5173"]
+COPY --from=build /app/dist ./dist
+COPY server ./server
+
+ENV NODE_ENV=production \
+    PORT=8080 \
+    STATIC_ROOT=/app/dist
+
+# distroless's nonroot user. The files above stay root's, so the process
+# cannot rewrite what it serves.
+USER 65532:65532
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["bun", "-e", "const r = await fetch('http://127.0.0.1:8080/'); process.exit(r.ok ? 0 : 1)"]
+
+# The base's entrypoint is bun.
+CMD ["server/serve.ts"]

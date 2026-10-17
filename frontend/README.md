@@ -33,8 +33,10 @@ administrator's key is in `../backend/config.docker.yaml`.
 
 ## Two proxies, and why they exist
 
-`vite.config.ts` proxies both of the console's upstreams, because the browser
-is a third party neither of them was built for.
+Both of the console's upstreams are proxied, because the browser is a third
+party neither of them was built for. Where each prefix leads is decided once,
+in `server/routes.ts`, and read by both servers that can sit in front of the
+console: Vite's in development, and `server/serve.ts` in the image.
 
 **`/api` → `localhost:8000`.** The API sets no CORS headers — it expects to be
 called by something holding a key, not by a page — so the console talks to it
@@ -50,8 +52,34 @@ proxy sets that header on the outgoing request options rather than in a
 flushed its headers by the time that event fires, which would break uploads
 over about a megabyte and nothing else.
 
-For a real deployment neither proxy is the answer: give the API a CORS policy,
-and configure the MinIO datastore with the endpoint clients actually reach.
+## In production
+
+`Dockerfile` builds the bundle on Bun and serves it from `server/serve.ts` on
+Bun's distroless image, as a non-root user, on port 8080. The server has no
+dependencies beyond Bun. It serves `dist/`, falls back to `index.html` for
+any path that is not a file, and proxies `/api` and `/blob` as above. Bodies
+stream through in both directions, and a signed URL's path and query are
+forwarded byte for byte.
+
+```bash
+docker build -t vigil-frontend .
+docker run -p 8080:8080 \
+  -e API_PROXY_TARGET=http://backend:8000 \
+  -e BLOB_PROXY_TARGET=http://minio:9000 \
+  vigil-frontend
+```
+
+| Variable            | Default                 | Meaning                                         |
+|---------------------|-------------------------|-------------------------------------------------|
+| `PORT`              | `8080`                  | where the server listens                        |
+| `API_PROXY_TARGET`  | `http://127.0.0.1:8000` | origin of the API                               |
+| `BLOB_PROXY_TARGET` | `http://127.0.0.1:9000` | origin the object store is reachable at         |
+| `BLOB_SIGNED_HOST`  | `minio:9000`            | the host the API signs object URLs for          |
+
+Files under `assets/` carry a content hash and are cached for a year;
+everything else, `index.html` above all, is revalidated on every load. Text is
+gzipped once and kept in memory. Request logs carry the path only — the query
+of a `/blob` request is a live credential.
 
 ## What the console assumes about the API
 

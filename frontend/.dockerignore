@@ -8,3 +8,6 @@ agent-knowledge
 .DS_Store
 .env
 .env.*
+Dockerfile
+.dockerignore
+README.md
