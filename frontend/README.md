@@ -29,7 +29,8 @@ npm run dev          # http://localhost:5173
 ```
 
 Sign in with an API key. Running the compose stack locally, the bootstrap
-administrator's key is in `../backend/config.docker.yaml`.
+administrator's key is `BOOTSTRAP_API_KEY` from `../docker-compose.yaml`, by
+default `dpk_local_docker_compose_development_key`.
 
 ## Two proxies, and why they exist
 

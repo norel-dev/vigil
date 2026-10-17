@@ -5,7 +5,9 @@
 # names the file to load and defaults to ./config.yaml.
 
 database:
-  url: sqlite:///mydb.db
+  # PostgreSQL only, reached through psycopg. This is the `postgres` service of
+  # the docker-compose.yaml at the repository root, with its default credentials.
+  url: postgresql+psycopg://postgres:password@localhost:5432/postgres
   echo: false
 
 auth:

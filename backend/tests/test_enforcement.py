@@ -6,7 +6,6 @@ server, a rule that answers nonsense — can be exercised directly.
 """
 
 from collections.abc import Iterator
-from pathlib import Path
 from uuid import uuid4
 
 import httpx
@@ -187,17 +186,17 @@ async def test_the_question_carries_the_subjects_roles() -> None:
 
 
 @pytest.fixture
-def client_without_a_policy_engine(tmp_path: Path) -> Iterator[TestClient]:
+def client_without_a_policy_engine(database_url: str) -> Iterator[TestClient]:
     """Build the real application, pointed at an OPA that is not running.
 
     Args:
-        tmp_path: Directory unique to the running test.
+        database_url: URL of the test's own empty metadata database.
 
     Yields:
         TestClient: A client whose every guarded request has to fail.
     """
     config = AppConfig(
-        database=DatabaseConfig(url=f"sqlite:///{tmp_path / 'test.db'}", echo=False),
+        database=DatabaseConfig(url=database_url, echo=False),
         auth=AuthConfig(),
         opa=OpaConfig(url="http://127.0.0.1:1", request_timeout_seconds=0.25),
     )

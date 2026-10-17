@@ -22,13 +22,12 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from src.features.users.model import User
-from src.identity import service as api_keys_service
 from src.identity.keys import digest_of, generate_key
 from src.identity.model import ApiKey
-from src.platform.exceptions import InvalidApiKeyError
 from tests.conftest import headers_for
 
 #: A key that is well formed and was never issued.
@@ -219,22 +218,18 @@ def test_the_key_itself_is_never_stored(client: TestClient, session: Session) ->
     assert digest_of(key=secret) in [key.secret_hash for key in stored]
 
 
-def test_a_key_left_behind_by_a_deleted_user_authenticates_nobody(
+def test_a_user_holding_a_key_cannot_be_deleted_out_from_under_it(
     engine: Engine,
 ) -> None:
-    """A dangling key is refused rather than resolved to whoever is left."""
-    orphaned = generate_key()
-
+    """A key can never outlive its user, so no key ever resolves to nobody."""
     with Session(engine) as session:
         user = User(email="gone@example.com", name="Gone")
         session.add(user)
         session.add(
-            ApiKey(user_id=user.id, name="theirs", secret_hash=digest_of(key=orphaned))
+            ApiKey(user_id=user.id, name="theirs", secret_hash=digest_of(key=generate_key()))
         )
         session.commit()
 
         session.delete(user)
-        session.commit()
-
-        with pytest.raises(InvalidApiKeyError):
-            api_keys_service.authenticate(session=session, key=orphaned)
+        with pytest.raises(IntegrityError):
+            session.commit()

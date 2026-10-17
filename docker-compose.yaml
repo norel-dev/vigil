@@ -1,0 +1,164 @@
+# This docker compose is for development purposes
+x-config:
+  POSTGRES_USER: &postgres_user ${POSTGRES_USER:-postgres}
+  POSTGRES_PASSWORD: &postgres_password ${POSTGRES_PASSWORD:-password}
+  POSTGRES_DB: &postgres_db ${POSTGRES_DB:-postgres}
+  MINIO_ROOT_USER: &minio_root_user ${MINIO_ROOT_USER:-dataplatform}
+  MINIO_ROOT_PASSWORD: &minio_root_password ${MINIO_ROOT_PASSWORD:-dataplatform-secret}
+
+  BACKEND_PORTS: &backend_ports "${BACKEND_PORT:-8000}:8000"
+  OPA_PORTS: &opa_ports "${OPA_PORT:-8181}:8181"
+  MINIO_PORTS: &minio_ports "${MINIO_PORT:-9000}:9000"
+  MINIO_CONSOLE_PORTS: &minio_console_ports "${MINIO_CONSOLE_PORT:-9001}:9001"
+  POSTGRES_PORTS: &postgres_ports "${POSTGRES_PORT:-5432}:5432"
+  FRONTEND_PORTS: &frontend_ports "${FRONTEND_PORT:-8080}:8080"
+  FRONTEND_BACKEND_ENDPOINT: &frontend_backend_endpoint "http://backend:8000"
+  FRONTEND_BLOB_PROXY_TARGET: &frontend_blob_proxy_target "http://minio:9000"
+
+  MINIO_ENDPOINT: &minio_endpoint minio:9000
+
+configs:
+  backend_config:
+    content: |
+      database:
+        url: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-postgres}
+        echo: false
+      auth:
+        bootstrap_platform_admins:
+          - email: "root@example.com"
+            name: "Root"
+            api_key: "${BOOTSTRAP_API_KEY:-dpk_local_docker_compose_development_key}"
+      opa:
+        url: http://opa:8181
+        decision_path: dataplatform/authz/decision
+        filter_path: dataplatform/authz/allowed_resource_ids
+        request_timeout_seconds: 2
+
+services:
+  backend:
+    build:
+      context: backend/
+    container_name: vigil-backend
+    depends_on:
+      opa:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - *backend_ports
+    configs:
+      - source: backend_config
+        target: /app/config.yaml
+    volumes:
+      # Dev only: the files behind the SQLite datastores bootstrap registers.
+      - sqlite_data:/data/sqlite
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/', timeout=2)"
+      interval: 10s
+      timeout: 5s
+      start_period: 40s
+      retries: 5
+
+  frontend:
+    build:
+      context: frontend/
+    container_name: vigil-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - *frontend_ports
+    environment:
+      API_PROXY_TARGET: *frontend_backend_endpoint
+      BLOB_PROXY_TARGET: *frontend_blob_proxy_target
+      BLOB_SIGNED_HOST: *minio_endpoint
+
+  opa:
+    image: openpolicyagent/opa:1.19.0
+    container_name: vigil-opa
+    ports:
+      - *opa_ports
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--set=decision_logs.console=true"
+      - "/policies"
+    volumes:
+      - ./backend/policies:/policies:ro
+    healthcheck:
+      test: ["CMD", "/opa", "version"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  minio:
+    image: cgr.dev/chainguard/minio
+    container_name: vigil-minio
+    ports:
+      - *minio_ports
+      - *minio_console_ports
+    environment:
+      MINIO_ROOT_USER: *minio_root_user
+      MINIO_ROOT_PASSWORD: *minio_root_password
+    command: ["server", "/data", "--console-address", ":9001"]
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  postgres:
+    image: postgres:18
+    container_name: vigil-postgres
+    environment:
+      POSTGRES_USER: *postgres_user
+      POSTGRES_PASSWORD: *postgres_password
+      POSTGRES_DB: *postgres_db
+    ports:
+      - *postgres_ports
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # A bootstrap service that runs once in order to allow for
+  # easy testing
+  bootstrap:
+    image: curlimages/curl:8.11.1
+    container_name: vigil-bootstrap
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: *minio_root_user
+      MINIO_ROOT_PASSWORD: *minio_root_password
+      API_URL: http://backend:8000
+      MINIO_ENDPOINT: *minio_endpoint
+      CONFIG_FILE: /config.yaml
+    configs:
+      - source: backend_config
+        target: /config.yaml
+    volumes:
+      - ./backend/bootstrap.sh:/bootstrap.sh:ro
+    entrypoint: ["sh", "/bootstrap.sh"]
+    restart: "no"
+
+volumes:
+  postgres_data:
+    driver: local
+  sqlite_data:
+    driver: local
+  minio_data:
+    driver: local

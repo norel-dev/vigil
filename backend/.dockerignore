@@ -19,5 +19,5 @@ htmlcov
 .idea
 .DS_Store
 # The local configuration holds a real bootstrap key, and the image is
-# configured from config.docker.yaml instead.
+# configured by whatever runs it; compose mounts its own at /app/config.yaml.
 config.yaml

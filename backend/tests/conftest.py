@@ -27,13 +27,14 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine
+from sqlalchemy import Engine, create_engine, text
+from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, select
 
 from src.app import create_app
@@ -51,6 +52,15 @@ POLICY_DIRECTORY = Path(__file__).resolve().parent.parent / "policies"
 #: digestless tag on purpose: what is being tested is that the platform speaks
 #: S3 correctly, so tracking the current server is the point.
 MINIO_IMAGE = "quay.io/minio/minio:latest"
+
+#: The PostgreSQL the metadata database runs on when the tests start their own.
+POSTGRES_IMAGE = "postgres:18"
+
+#: The environment variable naming a PostgreSQL server to use instead of
+#: starting one. It is a SQLAlchemy URL whose user may create databases:
+#:
+#:   TEST_DATABASE_URL=postgresql+psycopg://postgres:password@localhost:5432/postgres
+TEST_DATABASE_VARIABLE = "TEST_DATABASE_URL"
 
 #: The callers every test can authenticate as, and the names they go by.
 CALLERS = {
@@ -288,8 +298,94 @@ def other_minio_server() -> Iterator[MinIOServer]:
         yield server
 
 
+@pytest.fixture(scope="session")
+def postgres_server() -> Iterator[Engine]:
+    """Reach a PostgreSQL server the tests may create databases on.
+
+    The server named by `TEST_DATABASE_VARIABLE` is used when there is one.
+    Otherwise a container is started for the session, and the tests that need
+    a metadata database skip when Docker cannot provide it, exactly as the blob
+    tests do without MinIO.
+
+    Yields:
+        Engine: An autocommitting engine on the server's maintenance database,
+            for creating and dropping the databases the tests run against.
+    """
+    if (named := os.environ.get(TEST_DATABASE_VARIABLE)) is not None:
+        server = create_engine(named, isolation_level="AUTOCOMMIT")
+        try:
+            yield server
+        finally:
+            server.dispose()
+        return
+
+    if shutil.which("docker") is None:
+        pytest.skip(f"docker is not available and {TEST_DATABASE_VARIABLE} is not set")
+
+    port = _free_port()
+    started = subprocess.run(  # noqa: S603 - the binary is resolved from PATH
+        [
+            "docker", "run", "--detach", "--rm",
+            "--publish", f"127.0.0.1:{port}:5432",
+            "--env", "POSTGRES_PASSWORD=dataplatform-test",
+            POSTGRES_IMAGE,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if started.returncode != 0:
+        pytest.skip(f"a PostgreSQL container could not be started: {started.stderr.strip()}")
+
+    container = started.stdout.strip()
+    server = create_engine(
+        f"postgresql+psycopg://postgres:dataplatform-test@127.0.0.1:{port}/postgres",
+        isolation_level="AUTOCOMMIT",
+    )
+    try:
+        deadline = time.monotonic() + 60.0
+        while True:
+            try:
+                with server.connect():
+                    break
+            except OperationalError:
+                if time.monotonic() > deadline:
+                    pytest.fail("the PostgreSQL server did not become ready in time")
+                time.sleep(0.2)
+
+        yield server
+    finally:
+        server.dispose()
+        subprocess.run(  # noqa: S603 - the binary is resolved from PATH
+            ["docker", "kill", container],
+            capture_output=True,
+            check=False,
+        )
+
+
 @pytest.fixture
-def config(tmp_path: Path, opa_url: str) -> AppConfig:
+def database_url(postgres_server: Engine) -> Iterator[str]:
+    """Provide an empty metadata database for one test, and throw it away after.
+
+    Args:
+        postgres_server: The server to create the database on.
+
+    Yields:
+        str: The SQLAlchemy URL of the empty database.
+    """
+    name = f"test_{uuid4().hex}"
+    with postgres_server.connect() as connection:
+        connection.execute(text(f'CREATE DATABASE "{name}"'))
+
+    yield postgres_server.url.set(database=name).render_as_string(hide_password=False)
+
+    with postgres_server.connect() as connection:
+        # Forced, so that a test which leaked a connection still cleans up.
+        connection.execute(text(f'DROP DATABASE "{name}" WITH (FORCE)'))
+
+
+@pytest.fixture
+def config(database_url: str, opa_url: str) -> AppConfig:
     """Build a configuration pointing at a throwaway database and the test OPA.
 
     No bootstrap administrator is configured: the tests create the users they
@@ -297,14 +393,14 @@ def config(tmp_path: Path, opa_url: str) -> AppConfig:
     every test starts from a platform where nobody is trusted.
 
     Args:
-        tmp_path: Directory unique to the running test.
+        database_url: URL of the test's own empty metadata database.
         opa_url: Base URL of the policy server.
 
     Returns:
         AppConfig: Configuration for a single test.
     """
     return AppConfig(
-        database=DatabaseConfig(url=f"sqlite:///{tmp_path / 'test.db'}", echo=False),
+        database=DatabaseConfig(url=database_url, echo=False),
         auth=AuthConfig(),
         opa=OpaConfig(url=opa_url),
     )

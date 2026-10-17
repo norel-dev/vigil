@@ -4,6 +4,7 @@ The endpoints in front of this module decide *whether* a caller may touch a
 datastore; this module knows *how* to reach it.
 """
 
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from src.features.datastores.model import (
@@ -12,7 +13,7 @@ from src.features.datastores.model import (
     DataStoreVisibility,
 )
 from src.features.datastores.storage import DataStoreQuery, DataStoreQueryResponse
-from src.platform.exceptions import ObjectNotFoundError
+from src.platform.exceptions import ObjectInUseError, ObjectNotFoundError
 
 __all__ = [
     "create_datastore",
@@ -132,12 +133,27 @@ def delete_datastore(*, session: Session, store: DataStore) -> None:
     The underlying storage is left untouched; only the platform's record of
     how to reach it is removed.
 
+    A datastore that projects still hold tables or blobs in is refused rather
+    than forgotten, since forgetting it would leave those records pointing at
+    nothing. The database is what notices, through the foreign keys on them,
+    so this module does not need to know which features keep things in a
+    datastore.
+
     Args:
         session: The open database session.
         store: The datastore to forget.
+
+    Raises:
+        ObjectInUseError: If anything recorded by the platform still lives in
+            `store`.
     """
+    name = store.name
     session.delete(store)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as error:
+        session.rollback()
+        raise ObjectInUseError(object_type="datastore", identifier=name) from error
 
 
 async def run_query(*, store: DataStore, query: str) -> DataStoreQueryResponse:

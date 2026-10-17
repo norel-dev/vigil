@@ -70,8 +70,9 @@ export function Gate(props: {
         </div>
 
         <div className="vg-note" style={{ marginTop: 14 }}>
-          Running the compose stack locally? The bootstrap administrator's key is written into
-          <code className="dp-inline-code"> backend/config.docker.yaml</code>.
+          Running the compose stack locally? The bootstrap administrator's key is
+          <code className="dp-inline-code"> BOOTSTRAP_API_KEY</code>, by default
+          <code className="dp-inline-code"> dpk_local_docker_compose_development_key</code>.
         </div>
       </div>
     </div>

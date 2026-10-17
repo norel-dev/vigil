@@ -44,6 +44,10 @@ def upgrade() -> None:
     datastore gets when nobody says is a decision the API makes, and a
     database that answers it too would be a second place to change it.
     """
+    # Adding a column does not create the type behind it, and in PostgreSQL an
+    # enum is a type of its own, so it has to exist first.
+    VISIBILITY.create(op.get_bind(), checkfirst=True)
+
     with op.batch_alter_table("datastore", schema=None) as batch_op:
         batch_op.add_column(sa.Column("visibility", VISIBILITY, nullable=True))
 

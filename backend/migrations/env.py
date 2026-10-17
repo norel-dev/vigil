@@ -6,7 +6,7 @@ is configured to use, and there is no second copy of the URL to keep in step.
 Driven from inside the process, it is handed a connection through
 `config.attributes` and uses that instead, which is what lets the API bring
 its database up to date as it starts and what lets the tests migrate a
-throwaway file.
+throwaway database.
 """
 
 from logging.config import fileConfig
@@ -62,9 +62,6 @@ def _run(*, connection: Connection) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
-        # SQLite cannot alter a column in place, so Alembic rebuilds the table
-        # around the change instead. Harmless on databases that can.
-        render_as_batch=True,
         compare_type=True,
     )
 
@@ -79,7 +76,6 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        render_as_batch=True,
     )
 
     with context.begin_transaction():

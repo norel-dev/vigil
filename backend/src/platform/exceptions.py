@@ -12,6 +12,7 @@ __all__ = [
     "SchemaMigrationError",
     "ObjectNotFoundError",
     "DuplicateObjectError",
+    "ObjectInUseError",
     "AuthenticationError",
     "InvalidApiKeyError",
     "AuthorizationError",
@@ -64,6 +65,23 @@ class DuplicateObjectError(DataPlatformError):
             identifier: The name that was already in use.
         """
         super().__init__(f"A {object_type} called '{identifier}' already exists")
+        self.object_type = object_type
+        self.identifier = identifier
+
+
+class ObjectInUseError(DataPlatformError):
+    """Raised when an object cannot be removed while others still refer to it."""
+
+    def __init__(self, *, object_type: str, identifier: str) -> None:
+        """Record what was still in use.
+
+        Args:
+            object_type: The kind of object being removed.
+            identifier: How the caller referred to it.
+        """
+        super().__init__(
+            f"The {object_type} '{identifier}' is still in use and cannot be removed"
+        )
         self.object_type = object_type
         self.identifier = identifier
 

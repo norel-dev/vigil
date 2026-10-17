@@ -71,7 +71,10 @@ def downgrade() -> None:
     with op.batch_alter_table("user") as batch:
         batch.add_column(sa.Column("google_subject", sa.String(), nullable=True))
 
-    op.execute("UPDATE user SET google_subject = 'unlinked:' || id")
+    # Quoted, because `user` is a reserved word in PostgreSQL, where it names
+    # the current role rather than this table, and cast, because PostgreSQL
+    # will not concatenate a UUID onto text.
+    op.execute("UPDATE \"user\" SET google_subject = 'unlinked:' || CAST(id AS VARCHAR)")
 
     with op.batch_alter_table("user") as batch:
         batch.alter_column("google_subject", nullable=False)

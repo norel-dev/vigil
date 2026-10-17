@@ -29,7 +29,7 @@ from src.platform.exceptions import ConfigurationError
 #: check that it really is optional.
 MINIMAL_CONFIG = """
 database:
-  url: sqlite:///minimal.db
+  url: postgresql+psycopg://dataplatform:secret@localhost:5432/minimal
 auth: {}
 opa: {}
 """
@@ -57,7 +57,7 @@ def test_the_smallest_usable_file_loads(tmp_path: Path) -> None:
     config = load_config(path=_write(path=tmp_path / "c.yaml", text=MINIMAL_CONFIG))
 
     assert isinstance(config, AppConfig)
-    assert config.database.url == "sqlite:///minimal.db"
+    assert config.database.url == "postgresql+psycopg://dataplatform:secret@localhost:5432/minimal"
     assert config.auth.bootstrap_platform_admins == []
 
 
@@ -78,7 +78,7 @@ def test_what_the_file_states_wins_over_the_default(tmp_path: Path) -> None:
     """Otherwise a deployment could not point the platform at its own OPA."""
     text = """
 database:
-  url: sqlite:///stated.db
+  url: postgresql+psycopg://dataplatform:secret@localhost:5432/stated
   echo: true
 auth: {}
 opa:
@@ -174,11 +174,38 @@ def test_a_file_missing_a_section_the_platform_needs_is_refused(
         load_config(path=_write(path=tmp_path / "c.yaml", text=text))
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "sqlite:///metadata.db",
+        "postgresql://dataplatform:secret@localhost:5432/dataplatform",
+        "not a url at all",
+    ],
+)
+def test_a_metadata_database_that_is_not_postgresql_through_psycopg_is_refused(
+    tmp_path: Path, url: str
+) -> None:
+    """The migrations are written for PostgreSQL alone, so nothing else may start.
+
+    A bare `postgresql://` is refused too: SQLAlchemy would reach for psycopg2,
+    which the platform does not install, and fail at the first connection
+    rather than here.
+
+    Args:
+        tmp_path: Directory unique to the running test.
+        url: A URL the platform must not accept.
+    """
+    text = f"database:\n  url: {url}\nauth: {{}}\nopa: {{}}\n"
+
+    with pytest.raises(ConfigurationError, match="is invalid"):
+        load_config(path=_write(path=tmp_path / "c.yaml", text=text))
+
+
 def test_a_value_of_the_wrong_shape_is_refused(tmp_path: Path) -> None:
     """A timeout of 'soon' would otherwise fail at the first decision instead."""
     text = """
 database:
-  url: sqlite:///wrong.db
+  url: postgresql+psycopg://dataplatform:secret@localhost:5432/wrong
 auth: {}
 opa:
   request_timeout_seconds: soon
@@ -229,7 +256,7 @@ def test_the_process_loads_the_file_the_environment_chose(
     chosen = _write(path=tmp_path / "deployed.yaml", text=MINIMAL_CONFIG)
     monkeypatch.setenv(CONFIG_PATH_VARIABLE, str(chosen))
 
-    assert load_configuration().database.url == "sqlite:///minimal.db"
+    assert load_configuration().database.url == "postgresql+psycopg://dataplatform:secret@localhost:5432/minimal"
 
 
 def test_a_bad_file_named_by_the_environment_still_fails_as_configuration(

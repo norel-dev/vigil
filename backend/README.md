@@ -362,20 +362,24 @@ Anything speaking S3 works here; `secure: false` is for local development only.
 
 ### All of it, in Docker
 
+The compose file is `docker-compose.yaml` at the repository root, and runs the
+console too. From there:
+
 ```bash
 docker compose up -d
 ```
 
-That is the whole of it. Compose builds the API, starts the Open Policy Agent
-and the MinIO it depends on, and waits for each before starting the next. The
-API migrates its own database and creates the bootstrap administrator as it
-starts, and a short-lived `seed` container then registers the storage through
-the API, the way an administrator otherwise would:
+That is the whole of it. Compose builds the API, starts the PostgreSQL holding
+its metadata and the Open Policy Agent and MinIO it depends on, and waits for
+each before starting the next. The API migrates its own database and creates
+the bootstrap administrator as it starts, and a short-lived `bootstrap`
+container then registers the storage through the API, the way an
+administrator otherwise would:
 
 | Datastore        | Holds  | Where                                     |
 | ---------------- | ------ | ----------------------------------------- |
-| `sqlite-main`    | tables | `/data/stores/main.db` in the API container |
-| `sqlite-scratch` | tables | `/data/stores/scratch.db`, so that "which store did this table go to?" has an answer worth checking |
+| `sqlite-main`    | tables | `/data/sqlite/main.db` in the API container |
+| `sqlite-scratch` | tables | `/data/sqlite/scratch.db`, so that "which store did this table go to?" has an answer worth checking |
 | `minio-blobs`    | blobs  | the `minio` service                       |
 
 When it settles:
@@ -389,18 +393,19 @@ curl -H "Authorization: Bearer $KEY" http://localhost:8000/datastores/catalogue
 http://localhost:8000/docs is the same thing with a **Authorize** button to
 paste that key into, and http://localhost:9001 is the MinIO console.
 
-The key is in `config.docker.yaml`, which is committed precisely because
-nothing in it is a secret — every deployment that is not a laptop wants its
-own file and its own key. `docker compose logs -f api` follows the API, and
-`docker compose logs seed` says which datastores it registered; the seeding is
-idempotent, so a store deleted through the API comes back on the next `up`.
+The API's configuration is written inline in the compose file, under
+`configs.backend_config`. The key is a fixed local development one, and
+`BOOTSTRAP_API_KEY` replaces it; every deployment that is not a laptop wants
+its own file and its own key. `docker compose logs -f backend` follows the API,
+and `docker compose logs bootstrap` says which datastores it registered; the
+registration is idempotent, so a store deleted through the API comes back on
+the next `up`.
 
-Editing a file under `src/` reloads the server: the source is mounted over the
-image read-only, so no rebuild is needed. Changing a dependency is the case
-that needs one:
+The source is copied into the image rather than mounted, so a change to it,
+or to a dependency, needs a rebuild:
 
 ```bash
-docker compose up -d --build api
+docker compose up -d --build backend
 ```
 
 `docker compose down` stops it all and keeps the data; `docker compose down -v`
@@ -410,7 +415,7 @@ Three things are worth knowing:
 
 - **Port 8000 may already be yours.** A `fastapi dev` running on the host wins
   on `localhost` even while the container has the port published. Either stop
-  it, or move the container: `API_PORT=8001 docker compose up -d`.
+  it, or move the container: `BACKEND_PORT=8001 docker compose up -d`.
 - **A presigned URL points at `minio:9000`**, because a signature covers the
   host it was signed for and the API reaches MinIO under that name. Rewriting
   the host would invalidate it, so follow one from the host by resolving the
@@ -420,22 +425,25 @@ Three things are worth knowing:
   curl --resolve minio:9000:127.0.0.1 "<the signed url>"
   ```
 
-- **The metadata is in a volume**, not in `mydb.db` beside this README. The
-  file on disk belongs to whatever runs outside Docker, and the two are
-  deliberately not the same database.
+- **The metadata is in the `postgres` service**, in the `postgres_data`
+  volume, as `postgres` / `password` on `localhost:5432` (`POSTGRES_USER`,
+  `POSTGRES_PASSWORD` and `POSTGRES_DB` change them). An API run on the host
+  against that same server uses the same metadata.
 
 ### Or, the pieces separately
 
 Running the API on the host and only its dependencies in Docker is the same
 setup the tests use, and is what the rest of this section describes.
 
-### 1. Start Open Policy Agent and MinIO
+### 1. Start PostgreSQL, Open Policy Agent and MinIO
 
 ```bash
-docker compose up -d opa minio
+docker compose up -d postgres opa minio   # from the repository root
 ```
 
-MinIO is only needed if you mean to use blobs. Its console is at
+PostgreSQL holds the metadata and is published on `localhost:5432`, which is
+where `config.example.yaml` already points. MinIO is only needed if you mean to
+use blobs. Its console is at
 `http://localhost:9001`.
 
 Or, with OPA installed locally:
@@ -539,9 +547,10 @@ Read the generated revision before committing it. Two things need a human:
   `src.datastore.DataStoreImplementationColumn()`. Replace that with `sa.JSON()`.
   A revision is a historical record and has to keep running after the class it
   was named for has changed or gone, so revisions never import from `src`.
-* SQLite cannot alter a column in place. `render_as_batch` is on, so Alembic
-  rebuilds the table around the change; check that what it produced is what you
-  meant.
+* The metadata database is PostgreSQL, so raw SQL quotes `"user"`, which is a
+  reserved word there, and a new `sa.Enum` on an existing table is created with
+  `.create(op.get_bind(), checkfirst=True)` first, since adding a column does
+  not create its type.
 
 Other useful commands:
 
@@ -551,11 +560,6 @@ uv run alembic history              # every revision, newest first
 uv run alembic downgrade -1         # step back one revision
 uv run alembic check                # does the schema still match the models?
 ```
-
-Databases created before Alembic was introduced carry no revision. They are
-recognised on the first start, recorded as `0001_baseline` — the schema
-`SQLModel.metadata.create_all` used to produce — and then upgraded like any
-other. Nothing has to be deleted by hand.
 
 ## Tests
 
@@ -579,6 +583,16 @@ reason the list is worth having: `src/` raises none of them today, so the rule
 is a ratchet rather than a cleanup. Tests are exempted from the handful that
 only make sense about production code — a test asserts, and builds SQL out of
 the very identifiers it is checking the handling of.
+
+The metadata database is PostgreSQL, in the tests as everywhere else. The
+suite starts a `postgres:18` container for the session and gives each test a
+database of its own on it, dropped when the test finishes; without Docker,
+the tests that need a database skip. To use a server you already have, name
+one whose user may create databases:
+
+```bash
+TEST_DATABASE_URL=postgresql+psycopg://postgres:password@localhost:5432/postgres uv run pytest
+```
 
 Every test runs against a database built by the migrations rather than from the
 models, and `tests/test_migrations.py` fails the suite if the two ever disagree

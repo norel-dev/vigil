@@ -16,7 +16,7 @@ that fails safe.
 
 from pydantic import SecretStr
 from sqlalchemy import Engine
-from sqlalchemy.dialects.sqlite import dialect as sqlite_dialect
+from sqlalchemy.dialects.postgresql import dialect as postgresql_dialect
 from sqlmodel import Session, select
 
 from src.features.datastores.implementations import MinIODataStore, SQLiteDataStore
@@ -173,11 +173,11 @@ def test_nothing_is_written_as_nothing() -> None:
     """
     column = DataStoreImplementationColumn()
 
-    assert column.process_bind_param(None, dialect=sqlite_dialect()) is None
+    assert column.process_bind_param(None, dialect=postgresql_dialect()) is None
 
 
 def test_nothing_is_read_back_as_nothing() -> None:
     """The same, in the direction that would otherwise try to parse a null."""
     column = DataStoreImplementationColumn()
 
-    assert column.process_result_value(None, dialect=sqlite_dialect()) is None
+    assert column.process_result_value(None, dialect=postgresql_dialect()) is None

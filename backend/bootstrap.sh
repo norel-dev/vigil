@@ -67,15 +67,15 @@ register() {
 
 # Two SQLite stores rather than one, because a single datastore cannot show
 # what datastores are for: a table lands in the store its project named, and
-# proving that takes somewhere else it could have gone. Each is a file inside
-# the API container's /data volume, with a file per project beside it.
+# proving that takes somewhere else it could have gone. Each is a file in the
+# API container's /data/sqlite volume, with a file per project beside it.
 register 'sqlite-main' '{
   "name": "sqlite-main",
   "description": "SQLite tables, on the API container. The default place to put a table.",
   "visibility": "public",
   "datastore": {
     "implementation": "sqlite",
-    "sqlite_connection_string": "/data/stores/main.db"
+    "sqlite_connection_string": "/data/sqlite/main.db"
   }
 }'
 
@@ -85,7 +85,7 @@ register 'sqlite-scratch' '{
   "visibility": "public",
   "datastore": {
     "implementation": "sqlite",
-    "sqlite_connection_string": "/data/stores/scratch.db"
+    "sqlite_connection_string": "/data/sqlite/scratch.db"
   }
 }'
 

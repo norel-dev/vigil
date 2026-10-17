@@ -11,6 +11,8 @@ from typing import Any
 
 import yaml
 from pydantic import BaseModel, EmailStr, Field, ValidationError, field_validator
+from sqlalchemy import make_url
+from sqlalchemy.exc import ArgumentError
 
 from src.platform.exceptions import ConfigurationError
 
@@ -29,17 +31,53 @@ __all__ = [
 MINIMUM_BOOTSTRAP_KEY_LENGTH = 32
 
 
+#: The only SQLAlchemy driver the metadata database is reached through.
+METADATA_DATABASE_DRIVER = "postgresql+psycopg"
+
+
 class DatabaseConfig(BaseModel):
-    """How to reach the metadata database."""
+    """How to reach the metadata database, which is always PostgreSQL."""
 
     url: str = Field(
-        description="SQLAlchemy database URL for the platform metadata store.",
-        examples=["sqlite:///mydb.db"],
+        description="SQLAlchemy URL of the PostgreSQL database holding the platform metadata.",
+        examples=["postgresql+psycopg://dataplatform:secret@localhost:5432/dataplatform"],
     )
     echo: bool = Field(
         default=False,
         description="Whether SQLAlchemy should log every statement it emits.",
     )
+
+    @field_validator("url")
+    @classmethod
+    def _check_url_is_postgresql(cls, url: str) -> str:
+        """Reject a URL for any database other than PostgreSQL.
+
+        The migrations and the constraints the platform relies on are written
+        for PostgreSQL alone, so a URL for anything else would start a process
+        that misbehaves later rather than one that fails now.
+
+        Args:
+            url: The configured URL.
+
+        Returns:
+            str: The URL, unchanged.
+
+        Raises:
+            ValueError: If the URL cannot be parsed or names another database
+                or driver.
+        """
+        try:
+            driver = make_url(url).drivername
+        except ArgumentError as error:
+            raise ValueError(f"not a database URL: {error}") from error
+
+        if driver != METADATA_DATABASE_DRIVER:
+            raise ValueError(
+                f"the metadata database must be PostgreSQL, reached as "
+                f"'{METADATA_DATABASE_DRIVER}://...', not '{driver}://...'"
+            )
+
+        return url
 
 
 class BootstrapAdminConfig(BaseModel):

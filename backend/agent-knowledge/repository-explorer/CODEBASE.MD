@@ -140,12 +140,11 @@ frontend `npm run dev` → `http://localhost:5173`.
 | `/Users/norel/dataplatform/app/backend/` | The API project (uv/pyproject managed). | constant |
 | `app/backend/main.py` | Entry point: loads config via `src.platform.environment`, builds the app, exposes module-level `app`; exits 1 on `ConfigurationError`. | on start |
 | `app/backend/README.md` | Access model, catalogue, visibility, tables & privileges, blobs & signed URLs, Docker, keys, migrations, tests, layout. **The best single document on the backend.** | reference |
-| `app/backend/Dockerfile`, `.dockerignore` | Image for the API; source is bind-mounted over it read-only in compose so edits reload. | dev |
-| `app/backend/docker-compose.yaml` | `api` + `opa` (1.19.0) + `minio` (+ console on 9001) + a one-shot `seed` container. Named volumes `api-data`, `minio-data`. Ports overridable via `API_PORT`/`OPA_PORT`/`MINIO_PORT`. | dev |
-| `app/backend/config.docker.yaml` | Committed config for compose; bootstrap key `dpk_local_docker_compose_development_key`, DB `sqlite:////data/metadata/platform.db`, OPA at `http://opa:8181`. Nothing in it is secret by design. | dev |
+| `app/backend/Dockerfile`, `.dockerignore` | Image for the API; source and dependencies are baked in, so a change needs `docker compose up -d --build backend`. | dev |
+| `app/docker-compose.yaml` (repo root) | `backend` + `frontend` + `opa` (1.19.0) + `minio` (chainguard; console on 9001) + `postgres` (18) + a one-shot `bootstrap` container. The API's config is inline under `configs.backend_config`, mounted at `/app/config.yaml`; bootstrap key `BOOTSTRAP_API_KEY` (default `dpk_local_docker_compose_development_key`), DB the `postgres` service (`postgres`/`password` by default). Named volumes `postgres_data`, `sqlite_data`, `minio_data`. Ports overridable via `BACKEND_PORT`/`FRONTEND_PORT`/`OPA_PORT`/`MINIO_PORT`/`MINIO_CONSOLE_PORT`/`POSTGRES_PORT`. | dev |
 | `app/backend/config.example.yaml`, `config.yaml` | Template and local (gitignored) configuration. | setup |
 | `app/backend/pyproject.toml`, `uv.lock` | Deps, pytest/coverage/ruff settings. | setup |
-| `app/backend/scripts/seed-datastores.sh` | The "administrator" that registers `sqlite-main`, `sqlite-scratch`, `minio-blobs` through the API. Idempotent. | dev |
+| `app/backend/bootstrap.sh` | The "administrator" that registers `sqlite-main`, `sqlite-scratch` (files under `/data/sqlite`), `minio-blobs` through the API. Idempotent. | dev |
 | `app/backend/alembic.ini` | Alembic settings. Deliberately no `sqlalchemy.url` — it comes from `config.yaml` via `migrations/env.py`. | migrations |
 | `app/backend/migrations/versions/` | `0001_baseline`, `0002_system_level_datastores`, `0003_project_tables`, `0004_api_keys`, `0005_project_blobs`, `0006_datastore_visibility`. Revisions never import from `src`. | history |
 | `app/backend/policies/dataplatform/` | `authz.rego` and `authz_test.rego` (`opa test policies -v`). | every request |
@@ -352,7 +351,7 @@ previous report said "117 rules" by some method that does not reproduce; these t
 | `load_config(*, path)`, `AuthConfig._check_admins_are_distinct` | `src/platform/config.py` |
 | `configuration_path()`, `load_configuration()`; `CONFIG_PATH_VARIABLE = "DATAPLATFORM_CONFIG"`, `DEFAULT_CONFIG_PATH = Path("config.yaml")` | `src/platform/environment.py` |
 | `create_database_engine`, `open_session` | `src/database/engine.py` |
-| `upgrade_to_head`, `_alembic_configuration`, `_predates_alembic`; `BASELINE_REVISION`, `_BASELINE_TABLES = {user, project, projectmember, datastore, catalog}` | `src/database/migrations.py` |
+| `upgrade_to_head`, `_alembic_configuration` | `src/database/migrations.py` |
 | `get_services`, `get_session`, `get_enforcer`, `get_configuration` (+ `Services`/`DatabaseSession`/`Enforcer`/`Configuration` aliases) | `src/platform/dependencies.py` |
 | `register_error_handlers(*, app)` + 10 handlers (`_handle_invalid_api_key`, `_handle_permission_denied`, `_handle_policy_engine_down`, `_handle_not_found`, `_handle_duplicate`, `_handle_query_refused`, `_handle_query_failed`, `_handle_unsuitable_datastore`, `_handle_blob_provisioning_failure`, `_handle_provisioning_failure`) | `src/platform/error_handlers.py` |
 | `generate_key()`, `digest_of(*, key)`; `KEY_PREFIX = "dpk_"`, `_SECRET_BYTES = 32` | `src/identity/keys.py` |
@@ -439,7 +438,7 @@ previous report said "117 rules" by some method that does not reproduce; these t
   runtime — without it everything guarded is a 503.
 - **MinIO** (`quay.io/minio/minio:latest`), API on 9000, console on 9001. Needed for blobs;
   the blob tests run **two** independent servers.
-- **Database**: any SQLAlchemy URL; SQLite by default.
+- **Database**: PostgreSQL only, as a `postgresql+psycopg://` URL; `DatabaseConfig` rejects anything else. Tests start a `postgres:18` container (or use `TEST_DATABASE_URL`) with a fresh database per test.
 - **Docker Compose** for the whole stack; **curl** image for the seeding container.
 - **Helm/Kubernetes**: `chart/` depends on the Apache Ozone chart.
 - No external identity provider — the platform issues its own credentials.
@@ -618,11 +617,11 @@ previous report said "117 rules" by some method that does not reproduce; these t
   raises `ConfigurationError` and stops the process.
 - Autogenerated revisions render the implementation column as
   `src.datastore.DataStoreImplementationColumn()` — replace with `sa.JSON()`; revisions must never
-  import from `src`. `render_as_batch=True` is on for SQLite. Pre-Alembic databases are detected
-  and stamped `0001_baseline`.
+  import from `src`. Revisions target PostgreSQL only: quote `"user"` in raw SQL, and create a new
+  `sa.Enum` type before `add_column`.
 - Port 8000 collision: a host `fastapi dev` beats the published container port on localhost; use
-  `API_PORT=8001 docker compose up -d`. The compose metadata database lives in the `api-data`
-  volume, **not** in `mydb.db` beside the README.
+  `BACKEND_PORT=8001 docker compose up -d`. The compose metadata database is the `postgres`
+  service (`postgres_data` volume), published on `localhost:5432`.
 
 ### Exploration gotchas
 - Globbing `app/backend` without a subdirectory prefix returns thousands of `.venv` files and gets

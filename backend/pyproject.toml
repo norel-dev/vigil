@@ -11,6 +11,9 @@ dependencies = [
     "httpx>=0.28.1",
     "loguru>=0.7.3",
     "minio>=7.2.20",
+    # The driver behind the metadata database, which is always PostgreSQL and
+    # always reached through a `postgresql+psycopg://` URL.
+    "psycopg[binary]>=3.2",
     "pydantic>=2.13.4",
     "pyyaml>=6.0.3",
     "sqlmodel>=0.0.38",

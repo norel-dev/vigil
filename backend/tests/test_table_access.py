@@ -269,6 +269,22 @@ def test_an_owner_creates_a_table_and_reads_it_back(
     assert read_back.status_code == httpx.codes.OK, read_back.text
 
 
+def test_a_datastore_holding_a_table_cannot_be_forgotten(
+    client: TestClient, warehouse: str, alices_table: tuple[str, str]
+) -> None:
+    """Forgetting the datastore would leave Alice's table pointing at nothing."""
+    project_id, table = alices_table
+
+    forgotten = client.delete(f"/datastores/{warehouse}", headers=headers_for(caller="root"))
+
+    assert forgotten.status_code == httpx.codes.CONFLICT, forgotten.text
+    assert "still in use" in forgotten.json()["detail"]
+    still_there = client.get(
+        f"/projects/{project_id}/tables/{table}", headers=headers_for(caller="alice")
+    )
+    assert still_there.status_code == httpx.codes.OK, still_there.text
+
+
 def test_a_table_cannot_be_created_in_a_datastore_that_holds_blobs(
     client: TestClient, session: Session, warehouse: str
 ) -> None:

@@ -17,6 +17,7 @@ from src.platform.exceptions import (
     BlobProvisioningError,
     DuplicateObjectError,
     InvalidApiKeyError,
+    ObjectInUseError,
     ObjectNotFoundError,
     PermissionDeniedError,
     PolicyDecisionPointError,
@@ -82,6 +83,14 @@ def register_error_handlers(*, app: FastAPI) -> None:
     @app.exception_handler(DuplicateObjectError)
     async def _handle_duplicate(_: Request, error: DuplicateObjectError) -> JSONResponse:
         """Answer a name that is already taken with 409."""
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": str(error)},
+        )
+
+    @app.exception_handler(ObjectInUseError)
+    async def _handle_in_use(_: Request, error: ObjectInUseError) -> JSONResponse:
+        """Answer the removal of something others still refer to with 409."""
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content={"detail": str(error)},

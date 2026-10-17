@@ -1,26 +1,23 @@
 """Tests of the migrations themselves.
 
-Two things have to stay true for a database to stop breaking: the migrations
-must describe the same schema the models do, and a database that was created
-before the migrations existed must be carried forward rather than left in a
-state nothing can read.
+The migrations must describe the same schema the models do, apply cleanly to
+an empty database, and refuse a database they cannot account for.
 """
 
-import json
 from pathlib import Path
 
 import pytest
-from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
 from sqlalchemy import Engine, inspect, text
 from sqlmodel import SQLModel
 
 # Imported so that every table is declared on the metadata the comparison
 # below runs against, exactly as migrations/env.py does it.
 from src.database.engine import create_database_engine
-from src.database.migrations import BASELINE_REVISION, upgrade_to_head
+from src.database.migrations import upgrade_to_head
 from src.features.blobs import model as blobs_model  # noqa: F401
 from src.features.datastores import model as datastores_model  # noqa: F401
 from src.features.projects import model as projects_model  # noqa: F401
@@ -34,35 +31,16 @@ from src.platform.exceptions import SchemaMigrationError
 ALEMBIC_CONFIGURATION = Path(__file__).resolve().parent.parent / "alembic.ini"
 
 
-def _engine_at(*, path: Path) -> Engine:
-    """Return an engine bound to a SQLite file at `path`.
+def _engine_at(*, url: str) -> Engine:
+    """Return an engine bound to the database at `url`.
 
     Args:
-        path: Where the database file should live.
+        url: The test's own empty database, from the `database_url` fixture.
 
     Returns:
-        Engine: An engine for that file.
+        Engine: An engine for that database.
     """
-    return create_database_engine(config=DatabaseConfig(url=f"sqlite:///{path}"))
-
-
-def _build_a_pre_alembic_database(*, engine: Engine) -> None:
-    """Leave `engine`'s database in the state the old code used to leave it.
-
-    The old code called `SQLModel.metadata.create_all`, which produced the
-    schema the baseline revision describes and recorded nothing about it.
-    That is reproduced here by migrating to the baseline and then forgetting
-    that it happened.
-
-    Args:
-        engine: The engine whose database should be taken back in time.
-    """
-    with engine.begin() as connection:
-        config = Config(str(ALEMBIC_CONFIGURATION))
-        config.attributes["connection"] = connection
-        config.attributes["configure_logger"] = False
-        command.upgrade(config, BASELINE_REVISION)
-        connection.execute(text("DROP TABLE alembic_version"))
+    return create_database_engine(config=DatabaseConfig(url=url))
 
 
 def test_the_migrations_produce_the_schema_the_models_describe(engine: Engine) -> None:
@@ -82,68 +60,9 @@ def test_the_migrations_produce_the_schema_the_models_describe(engine: Engine) -
     )
 
 
-def test_a_database_from_before_alembic_is_carried_forward(tmp_path: Path) -> None:
-    """The databases that exist today are upgraded, not rejected.
-
-    This is the case that used to break: a database created by the old code
-    has the columns the permission model change removed, and nothing to say
-    which revision it is at.
-    """
-    engine = _engine_at(path=tmp_path / "old.db")
-    _build_a_pre_alembic_database(engine=engine)
-
-    upgrade_to_head(engine=engine)
-
-    inspector = inspect(engine)
-    datastore_columns = {column["name"] for column in inspector.get_columns("datastore")}
-    assert "project_id" not in datastore_columns
-    assert "owner_id" not in datastore_columns
-    assert "catalog" not in inspector.get_table_names()
-    engine.dispose()
-
-
-def test_upgrading_a_pre_alembic_database_keeps_its_rows(tmp_path: Path) -> None:
-    """Migrating is not a euphemism for starting again.
-
-    A datastore registered under the old model loses the project and the
-    owner it used to carry, because those are what the change removed, but
-    the datastore itself and the connection details behind it survive.
-    """
-    engine = _engine_at(path=tmp_path / "old.db")
-    _build_a_pre_alembic_database(engine=engine)
-    implementation = {"implementation": "sqlite", "sqlite_connection_string": "/data/a.db"}
-
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                "INSERT INTO datastore "
-                "(name, implementation, description, project_id, owner_id, creation_date) "
-                "VALUES (:name, :implementation, :description, :project, :owner, :created)"
-            ),
-            {
-                "name": "warehouse",
-                "implementation": json.dumps(implementation),
-                "description": "the old warehouse",
-                "project": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "owner": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                "created": "2026-01-01 00:00:00",
-            },
-        )
-
-    upgrade_to_head(engine=engine)
-
-    with engine.connect() as connection:
-        stored = connection.execute(
-            text("SELECT name, implementation, description FROM datastore")
-        ).all()
-
-    assert stored == [("warehouse", json.dumps(implementation), "the old warehouse")]
-    engine.dispose()
-
-
-def test_upgrading_an_up_to_date_database_changes_nothing(tmp_path: Path) -> None:
+def test_upgrading_an_up_to_date_database_changes_nothing(database_url: str) -> None:
     """The API migrates on every start, so doing it twice has to be harmless."""
-    engine = _engine_at(path=tmp_path / "fresh.db")
+    engine = _engine_at(url=database_url)
 
     upgrade_to_head(engine=engine)
     before = sorted(inspect(engine).get_table_names())
@@ -154,17 +73,17 @@ def test_upgrading_an_up_to_date_database_changes_nothing(tmp_path: Path) -> Non
     engine.dispose()
 
 
-def test_a_fresh_database_ends_up_at_the_latest_revision(tmp_path: Path) -> None:
+def test_a_fresh_database_ends_up_at_the_latest_revision(database_url: str) -> None:
     """A database built from nothing is stamped, so the next upgrade knows where it is."""
-    engine = _engine_at(path=tmp_path / "fresh.db")
+    engine = _engine_at(url=database_url)
 
     upgrade_to_head(engine=engine)
 
     with engine.connect() as connection:
         revision = MigrationContext.configure(connection).get_current_revision()
 
-    assert revision is not None
-    assert revision != BASELINE_REVISION, "the baseline is not the latest revision"
+    head = ScriptDirectory.from_config(Config(str(ALEMBIC_CONFIGURATION))).get_current_head()
+    assert revision == head
     engine.dispose()
 
 
@@ -185,7 +104,7 @@ def test_every_table_the_models_declare_exists_after_migrating(
 
 
 def test_a_database_stamped_with_an_unknown_revision_refuses_to_migrate(
-    tmp_path: Path,
+    database_url: str,
 ) -> None:
     """A database from a newer build is reported rather than migrated blindly.
 
@@ -194,7 +113,7 @@ def test_a_database_stamped_with_an_unknown_revision_refuses_to_migrate(
     about a schema nothing here describes, so the process refuses to start
     instead of serving requests against it.
     """
-    engine = _engine_at(path=tmp_path / "from-the-future.db")
+    engine = _engine_at(url=database_url)
     upgrade_to_head(engine=engine)
     with engine.begin() as connection:
         connection.execute(
@@ -207,9 +126,9 @@ def test_a_database_stamped_with_an_unknown_revision_refuses_to_migrate(
     engine.dispose()
 
 
-def test_the_failure_says_the_database_could_not_be_migrated(tmp_path: Path) -> None:
+def test_the_failure_says_the_database_could_not_be_migrated(database_url: str) -> None:
     """Alembic's own explanation is carried through, since it names the revision."""
-    engine = _engine_at(path=tmp_path / "from-the-future.db")
+    engine = _engine_at(url=database_url)
     upgrade_to_head(engine=engine)
     with engine.begin() as connection:
         connection.execute(
